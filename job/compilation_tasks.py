@@ -113,7 +113,7 @@ def compilation_tasks(text=""):
 
             if devices == "ESP8266":
                 # command = f"/bin/bash -i -c get_esp8266  && cd {micropython_dir} && make -C mpy-cross && cd ports/esp8266 && make"
-                command = f"/bin/bash -i -c 'alias python=python2; get_esp8266  && cd {micropython_dir} && make -C mpy-cross && cd ports/esp8266 && make'"
+                command = f"/bin/bash -i -c 'alias python=python2 && get_esp8266  && cd {micropython_dir} && make -C mpy-cross && cd ports/esp8266 && make'"
             elif devices == "ESP32":
                 command = f"/bin/bash -i -c \"get_esp32\" && cd {micropython_dir} && make -C mpy-cross && cd ports/esp32 && make BOARD=ESP32_GENERIC_C3"
 
