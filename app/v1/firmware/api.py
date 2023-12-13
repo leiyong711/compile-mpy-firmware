@@ -47,8 +47,9 @@ async def upload_file(
         remark: str = Form('', title="备注"),
         db: Session = Depends(get_db)
 ):
+    filename_dir = generate_random_number()
     upload_dir = config.get_jsonpath("ProjectConfig.upload_dir", 'upload')
-    temporary_folder = f"{APP_PATH}{upload_dir}/{generate_random_number()}"
+    temporary_folder = f"{APP_PATH}{upload_dir}/{filename_dir}"
     try:
         lg.debug(f"temporary_folder: {temporary_folder}")
 
@@ -75,7 +76,7 @@ async def upload_file(
             "flash_size": flash_size,       # Flash大小
             "status": 3,                    # 编译状态,0:编译成功,1:编译失败,2:编译中,3:等待编译
             "remark": remark,               # 备注
-            "custom_source_code_file_path": f"{upload_dir}/{generate_random_number()}.zip",  # 自定义源码文件路径
+            "custom_source_code_file_path": f"{upload_dir}/{filename_dir}.zip",  # 自定义源码文件路径
         }
 
         # 提取密码
