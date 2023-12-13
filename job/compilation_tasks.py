@@ -149,10 +149,11 @@ def compilation_tasks(text=""):
 
         # 恢复modules
         if micropython_dir and device_dir:
+            lg.debug(f"恢复modules")
             try:
                 shutil.rmtree(f"{micropython_dir}{device_dir}/modules")
             except:
-                ...
+                lg.error(f"删除modules文件夹失败,原因:\n{traceback.format_exc()}")
 
 
 
