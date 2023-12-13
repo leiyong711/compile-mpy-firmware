@@ -9,6 +9,6 @@ ProjectConfig:                             # 项目配置
   log_level: debug    # 日志级别
   upload_dir: /res_pack/upload  # 上传文件目录
   after_compilation_dir: /res_pack/after_compilation  # 编译后文件目录
-  micropython_dir: D:\Code2\compile-mpy-firmware\micropython-master  # micropython目录
+  micropython_dir: /data/micropython/micropython  # micropython目录
   esp8266_dir: /ports/esp8266  # 模型目录
   esp32_dir: /ports/esp32  # 模型目录
