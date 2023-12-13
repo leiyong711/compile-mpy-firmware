@@ -216,7 +216,8 @@ def excuting_command_old(command, timeout_seconds=60):
     except subprocess.CalledProcessError as e:
         lg.error(f"执行失败,错误原因:\n{traceback.format_exc()}")
         return False, f"Command failed with return code: {e.returncode}"
-
+alias get_esp8266='export PATH="/home/leiyong/workspace/ESP8266/esp-open-sdk/xtensa-lx106-elf/bin:$PATH"'
+alias get_esp32='. $HOME/workspace/ESP32/esp-idf/export.sh'
 def excuting_command(command, timeout_seconds=60):
     """
     执行命令
@@ -225,7 +226,8 @@ def excuting_command(command, timeout_seconds=60):
     :return:
     """
     lg.debug(f"执行命令：{command}")
-    process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    # process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True, executable='/bin/bash')
 
     try:
         stdout, stderr = process.communicate(timeout=timeout_seconds)
