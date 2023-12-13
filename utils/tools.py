@@ -199,7 +199,7 @@ async def sign_md5(data):
     lg.debug('MD5加密后：' + sign)
     return sign
 
-def excuting_command_old(command, timeout_seconds=60):
+def excuting_command(command, timeout_seconds=60):
     """
     执行命令
     :param command:
@@ -218,7 +218,7 @@ def excuting_command_old(command, timeout_seconds=60):
         return False, f"Command failed with return code: {e.returncode}"
 
 
-def excuting_command(command, timeout_seconds=60):
+def excuting_command_old(command, timeout_seconds=60):
     """
     执行命令
     :param command:
