@@ -217,7 +217,7 @@ def excuting_command_old(command, timeout_seconds=60):
         lg.error(f"执行失败,错误原因:\n{traceback.format_exc()}")
         return False, f"Command failed with return code: {e.returncode}"
 
-def executing_command(command, timeout_seconds=60):
+def excuting_command(command, timeout_seconds=60):
     """
     执行命令
     :param command:
