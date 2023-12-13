@@ -120,7 +120,7 @@ def compilation_tasks(text=""):
             status, result = excuting_command(command, timeout_seconds=300)
             if status:
                 # 搜索目标字符串
-                if "_GENERIC/firmware.bin" in result.stdout:
+                if "_GENERIC/firmware.bin" in result:
                     lg.debug(result.stdout)
                     lg.info(f"编译成功")
                 else:
