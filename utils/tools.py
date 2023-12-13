@@ -209,7 +209,7 @@ def excuting_command_old(command, timeout_seconds=60):
     lg.debug(f"执行命令：{command}")
     try:
         result = subprocess.run(command, shell=True, timeout=timeout_seconds, check=True, capture_output=True, text=True)
-        return True, result
+        return True, result.stdout
     except subprocess.TimeoutExpired:
         lg.error(f"执行超时,错误原因:\n{traceback.format_exc()}")
         return False, f"Command timed out after {timeout_seconds} seconds"
