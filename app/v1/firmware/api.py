@@ -38,7 +38,7 @@ def get_db():
 
 @app.post("/test")
 async def test(commond: str = File(..., title="命令"),):
-    from utils.tools import excuting_command
+    from utils.tools import excuting_command_old as excuting_command
     status, result = excuting_command(commond)
     lg.debug(f"status: {status}\tresult: {result}")
     return JSONResponse({"status": status, "result": result})
