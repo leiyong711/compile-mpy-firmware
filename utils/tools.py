@@ -212,10 +212,12 @@ def excuting_command(command, timeout_seconds=60):
         return True, result.stdout
     except subprocess.TimeoutExpired:
         lg.error(f"执行超时,错误原因:\n{traceback.format_exc()}")
-        return False, f"Command timed out after {timeout_seconds} seconds"
+        return False, f"命令在 {timeout_seconds} 秒后超时"
     except subprocess.CalledProcessError as e:
         lg.error(f"执行失败,错误原因:\n{traceback.format_exc()}")
-        return False, f"Command failed with return code: {e.returncode}"
+        lg.error(f"Command output: {e.output}")
+        lg.error(f"Command error output: {e.stderr}")
+        return False, f"命令失败并返回代码: {e.returncode}"
 
 
 def excuting_command_old(command, timeout_seconds=60):
