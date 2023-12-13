@@ -1,0 +1,14 @@
+ProjectConfig:                             # 项目配置
+  project_title: micropython固件编译平台    # 项目名称
+  version: 1.0.0            # 项目版本
+  description: API交互文档   # 项目描述
+  api_docs_url: /docs       # docs API文档路径
+  api_redoc_url: /redoc     #  redoc API文档路径
+  port: 9000          # 服务端口
+  host: 0.0.0.0       # 服务地址
+  log_level: debug    # 日志级别
+  upload_dir: /res_pack/upload  # 上传文件目录
+  after_compilation_dir: /res_pack/after_compilation  # 编译后文件目录
+  micropython_dir: D:\Code2\compile-mpy-firmware\micropython-master  # micropython目录
+  esp8266_dir: /ports/esp8266  # 模型目录
+  esp32_dir: /ports/esp32  # 模型目录

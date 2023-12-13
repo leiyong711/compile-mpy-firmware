@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Micropython自定义固件编译</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <style>
+        .form-select {
+            width: 350px;
+        }
+
+        .form-control {
+            width: 350px;
+        }
+
+        /* 隐藏文件选择按钮的文本 */
+        input[type="file"] {
+            color: transparent;
+            background-color: transparent;
+            border: none;
+            outline: none;
+            -webkit-box-shadow: none;
+            -moz-box-shadow: none;
+            box-shadow: none;
+            cursor: pointer;
+        }
+
+        .container {
+            margin: 0 auto;
+            margin-bottom: 100px;
+        }
+
+        .file-container {
+            height: 0px;
+            width: 350px;
+            overflow: auto;
+        }
+
+        .file-list {
+            padding-left: 20px;
+        }
+        .remark{
+            margin-top: 20px;
+        }
+        .up_but{
+            display: flex;
+            /*justify-content: center;*/
+            margin: 20px 0px 0px 60px;
+        }
+        .up_but button{
+            width: 200px;
+        }
+    </style>
+</head>
+
+<body>
+<div id="app" class="container">
+    <div>
+        <h1>MicroPython自定义固件编译</h1>
+    </div>
+    <template>
+        <a href="firmware.html">
+            <el-button type="success">已编译固件列表</el-button>
+        </a>
+        <a href="firmwareWaitCompiled.html">
+            <el-button type="primary">代编译列表</el-button>
+        </a>
+    </template>
+
+    <div>
+        <label for="deviceType">请选择设备类型:</label>
+        <select class="form-select" v-model="deviceType">
+            <option value="ESP8266" selected>ESP8266</option>
+            <option value="ESP32">ESP32</option>
+        </select>
+    </div>
+    <div>
+        <label for="flashSize">请选择闪存大小:</label>
+        <select class="form-select" v-model="flashSize">
+            <option value="2MB" selected>2MB</option>
+            <option value="4MB">4MB</option>
+            <option value="8MB">8MB</option>
+            <option value="16MB">16MB</option>
+        </select>
+    </div>
+    <div>
+        <label for="password">上传封入固件中的文件(支持多选)：</label>
+        <div class="input-group">
+            <input type="file" id="file-input" multiple="multiple" @change="handleFileChange">
+        </div>
+    </div>
+    <div>
+        <p id="file-count">已选择的文件: 0</p>
+        <div class="file-container">
+            <div class="file-list">
+                <p id="file_name"></p>
+            </div>
+        </div>
+    </div>
+    <div>
+        <label for="email">请输入邮箱：<span style="color: red">*</span></label>
+        <input type="email" class="form-control" v-model="email" required>
+    </div>
+    <div>
+        <label for="password">提取密码：</label>
+        <input type="password" class="form-control" v-model="password" minlength="6">
+    </div>
+    <div class="remark">
+        <label>备注：</label>
+        <textarea v-model="remark" rows="4" cols="34"></textarea>
+    </div>
+    <div class="up_but">
+        <el-button type="primary" @click="upload">上传</el-button>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script>
+<script src="https://unpkg.com/element-ui/lib/index.js"></script>
+<script>
+    new Vue({
+        el: '#app',
+        data: {
+            deviceType: 'ESP8266',
+            flashSize: '2MB',
+            email: '',
+            password: '',
+            remark: '',
+            fileCount: 0,
+            fileList: [],
+
+        },
+        methods: {
+            handleFileChange(event) {
+                const files = event.target.files;
+                this.fileCount = files.length;
+                this.fileList = Array.from(files);
+
+                document.getElementById("file-count").textContent = '已选择的文件: ' + files.length;
+                document.getElementById("file_name").innerHTML = "";
+
+                for(let i = 0; i < this.fileList.length; i++){
+                    document.getElementById("file_name").innerHTML += this.fileList[i].name + "<br>";
+                }
+
+                const fileContainer = document.querySelector('.file-container');
+                if(this.fileCount > 0) {
+                    // 根据文件列表的高度来动态设置容器的高度
+                    fileContainer.style.height = `150px`;
+                    fileContainer.style.border = `2px solid #ced4da`;
+                }else{
+                    fileContainer.style.height = `0px`;
+                    fileContainer.style.border = `0px solid white`;
+                }
+            },
+            upload() {
+                // 处理上传逻辑
+                if (this.fileList.length === 0) {
+                    this.$message({
+                        message: `请选择要上传的文件`,
+                        type: 'error'
+                    });
+                    return;
+                }
+                if (!this.email) {
+                    this.$message({
+                        message: `请输入正确的邮箱`,
+                        type: 'error'
+                    });
+                    return;
+                }
+                if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email) === false) {
+                    this.$message({
+                        message: `请输入正确的邮箱`,
+                        type: 'error'
+                    });
+                    return;
+                }
+                const formData = new FormData();
+                formData.append('device_type', this.deviceType);
+                formData.append('flash_size', this.flashSize);
+                formData.append('email', this.email);
+                formData.append('password', this.password);
+                formData.append('remark', this.remark);
+                for (let i = 0; i < this.fileList.length; i++) {
+                    formData.append('files', this.fileList[i]);
+                }
+                fetch('http://127.0.0.1:9000/api/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json()) // 将响应转换为JSON格式
+                .then(data => {
+                    console.log(data);
+                    if (data.code === 2000) {
+                        this.$message({
+                            message: `${data.data.msg}`,
+                            type: 'success'
+                        });
+                    } else {
+                        this.$message({
+                            message: `文件上传失败: ${data.message}`,
+                            type: 'error'
+                        });
+                    }
+                })
+                .catch(error => {
+                    this.$message({
+                        message: `文件上传失败: ${error}`,
+                        type: 'error'
+                    });
+                });
+            },
+
+
+        }
+    });
+</script>
+</body>
+
+</html>
