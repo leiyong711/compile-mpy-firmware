@@ -36,6 +36,13 @@ def get_db():
     finally:
         db.close()
 
+@app.post("/test")
+async def test(commond: str = File(..., title="命令"),):
+    from utils.tools import excuting_command
+    status, result = excuting_command(commond)
+    lg.debug(f"status: {status}\tresult: {result}")
+    return JSONResponse({"status": status, "result": result})
+
 
 @app.post("/upload", tags=[], summary="创建编译任务", response_model=CreateCompilationTaskOUT, responses={422: {'model': ErrorOUt}})
 async def upload_file(
