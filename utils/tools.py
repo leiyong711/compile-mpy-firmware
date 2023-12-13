@@ -12,6 +12,7 @@ import os
 import shutil
 import time
 import json
+import traceback
 import zipfile
 import requests
 import datetime
@@ -210,8 +211,10 @@ def excuting_command(command, timeout_seconds=60):
         result = subprocess.run(command, shell=True, timeout=timeout_seconds, check=True, capture_output=True, text=True)
         return True, result
     except subprocess.TimeoutExpired:
+        lg.error(f"执行超时,错误原因:\n{traceback.format_exc()}")
         return False, f"Command timed out after {timeout_seconds} seconds"
     except subprocess.CalledProcessError as e:
+        lg.error(f"执行失败,错误原因:\n{traceback.format_exc()}")
         return False, f"Command failed with return code: {e.returncode}"
 
 
