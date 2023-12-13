@@ -121,7 +121,7 @@ def compilation_tasks(text=""):
             if status:
                 # 搜索目标字符串
                 if "_GENERIC/firmware.bin" in result:
-                    lg.debug(result.stdout)
+                    lg.debug(result)
                     lg.info(f"编译成功")
                 else:
                     lg.error(f"编译失败，原因：{result}")
