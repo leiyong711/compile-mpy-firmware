@@ -199,7 +199,7 @@ async def sign_md5(data):
     lg.debug('MD5加密后：' + sign)
     return sign
 
-def excuting_command(command, timeout_seconds=60):
+def excuting_command_old(command, timeout_seconds=60):
     """
     执行命令
     :param command:
@@ -216,6 +216,33 @@ def excuting_command(command, timeout_seconds=60):
     except subprocess.CalledProcessError as e:
         lg.error(f"执行失败,错误原因:\n{traceback.format_exc()}")
         return False, f"Command failed with return code: {e.returncode}"
+
+def executing_command(command, timeout_seconds=60):
+    """
+    执行命令
+    :param command:
+    :param timeout_seconds:
+    :return:
+    """
+    lg.debug(f"执行命令：{command}")
+    process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    try:
+        stdout, stderr = process.communicate(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        lg.error(f"执行超时,错误原因:\n{traceback.format_exc()}")
+        return False, f"Command timed out after {timeout_seconds} seconds"
+    except Exception as e:
+        process.kill()
+        lg.error(f"执行失败,错误原因:\n{traceback.format_exc()}")
+        return False, str(e)
+
+    if process.returncode != 0:
+        lg.error(f"执行失败,错误原因:\n{stderr}")
+        return False, f"Command failed with return code: {process.returncode}"
+
+    return True, stdout
 
 
 
