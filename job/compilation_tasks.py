@@ -141,6 +141,9 @@ def compilation_tasks(text=""):
                     file.write(command + "\n")
             command = f"sh {APP_PATH}/build_script.sh"
 
+            # 编译开始时间
+            compilation_start_time = datetime.now()
+
             status, result = excuting_command(command, timeout_seconds=300)
 
             if not status:
@@ -164,6 +167,8 @@ def compilation_tasks(text=""):
                 raise Exception(f"编译失败，原因：未在{bin_file_name}中找到bin文件")
 
             lg.info(f"编译成功")
+            # 总耗时
+            total_time_spent = int((datetime.now() - compilation_start_time).total_seconds() * 1000)
 
             # 固件文件夹名称
             after_compilation_dir = config.get_jsonpath("ProjectConfig.after_compilation_dir", "/res_pack/after_compilation_dir") # 编译后的文件夹名称
@@ -181,6 +186,7 @@ def compilation_tasks(text=""):
             # 复制上传的源代码压缩包
             shutil.copy(f"{APP_PATH}{first_result.custom_source_code_file_path}", compile_content_file_path)
 
+
             # 插入数据库
             params = {
                 "email": first_result.email,                     # 邮箱
@@ -189,24 +195,34 @@ def compilation_tasks(text=""):
                 "firmware_file_path": f"{compile_content_file_path}/{Path(bin_file_name).name}",  # 固件文件路径
                 "custom_source_code_file_path": f"{compile_content_file_path}/{Path(first_result.custom_source_code_file_path).name}",      # 自定义源码文件路径
                 "remark": first_result.remark,               # 备注
-                "compilation_time_consuming": f"",  # 自定义源码文件路径
-                "retrieve_password": first_result.retrieve_password,  # 自定义源码文件路径
-                "upload_time": f"",  # 自定义源码文件路径
-                "start_compilation_time": f"",  # 自定义源码文件路径
+                "compilation_time_consuming": total_time_spent,  # 编译耗时
+                "retrieve_password": first_result.retrieve_password,  # 提取密码
+                "upload_time": first_result.update_time,  # 上传时间
+                "start_compilation_time": f"{compilation_start_time.strftime('%Y-%m-%d %H:%M:%S')}",  # 开始编译时间
             }
+
+            new_instance = Firmware(**params)
+            session.add(new_instance)
+            session.commit()
+            session.refresh(new_instance)
 
 
 
             # 获取编译数据
-            custom_source_code_file_path = first_result.custom_source_code_file_path    # 自定义源码文件路径
-            lg.debug(f"custom_source_code_file_path: {custom_source_code_file_path}")
+            # custom_source_code_file_path = first_result.custom_source_code_file_path    # 自定义源码文件路径
+            # lg.debug(f"custom_source_code_file_path: {custom_source_code_file_path}")
 
             # 修改状态和更新时间
-            first_result.status = 3  # 假设2代表"编译中"# 编译状态,0:编译成功,1:编译失败,2:编译中,3:等待编译
-            first_result.update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # 更新时间为当前时间
+            # first_result.status = 3  # 假设2代表"编译中"# 编译状态,0:编译成功,1:编译失败,2:编译中,3:等待编译
+            # first_result.update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # 更新时间为当前时间
+
+            # 删除原来的数据
+            session.delete(first_result)
 
             # 提交更改
             session.commit()
+
+            lg.debug(f"编译成功，删除原来的数据")
 
         except:
             # 修改状态和更新时间
