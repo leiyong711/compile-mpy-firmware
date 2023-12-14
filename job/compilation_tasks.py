@@ -114,23 +114,23 @@ def compilation_tasks(text=""):
 
             if devices == "ESP8266":
                 # command = f"/bin/bash -i -c get_esp8266  && cd {micropython_dir} && make -C mpy-cross && cd ports/esp8266 && make"
-                command = f"/bin/bash -i -c 'get_esp8266  && cd {micropython_dir} && make -C mpy-cross && cd ports/esp8266 && make'"
-                # # 定义你的命令
-                # commands = [
-                #     "get_esp8266",
-                #     f"cd {micropython_dir}",
-                #     "make -C mpy-cross",
-                #     "cd ports/esp8266",
-                #     "make"
-                # ]
-                #
-                # # 创建一个新的 shell 脚本文件
-                # with open("esp_8266_script.sh", "w") as file:
-                #     file.write("#!/bin/bash\n")
-                #     for command in commands:
-                #         file.write(command + "\n")
-                #
-                # command = "/bin/bash -i -c 'chmod +x esp_8266_script.sh && sh esp_8266_script.sh'"
+                # command = f"/bin/bash -i -c 'get_esp8266  && cd {micropython_dir} && make -C mpy-cross && cd ports/esp8266 && make'"
+                # 定义你的命令
+                commands = [
+                    "get_esp8266",
+                    f"cd {micropython_dir}",
+                    "make -C mpy-cross",
+                    "cd ports/esp8266",
+                    "make"
+                ]
+
+                # 创建一个新的 shell 脚本文件
+                with open(f"{APP}/esp_8266_script.sh", "w") as file:
+                    file.write("#!/bin/bash\n")
+                    for command in commands:
+                        file.write(command + "\n")
+
+                command = f"/bin/bash -i -c 'chmod +x {APP}/esp_8266_script.sh && sh {APP}/esp_8266_script.sh'"
 
             elif devices == "ESP32":
                 command = f"/bin/bash -i -c 'get_esp32' && cd {micropython_dir} && make -C mpy-cross && cd ports/esp32 && make BOARD=ESP32_GENERIC_C3"
