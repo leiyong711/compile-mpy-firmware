@@ -41,6 +41,7 @@ def compilation_tasks(text=""):
 
         # 有正在编译的任务，直接返回
         if data_being_compiled:
+            lg.debug(f"有正在编译的任务，直接返回")
             return
 
         # 为等待编译的数据创建查询
@@ -62,7 +63,7 @@ def compilation_tasks(text=""):
         first_result.update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # 更新时间为当前时间
 
         # 提交更改
-        # session.commit()
+        session.commit()
         try:
             # 开始编译时间
             devices = first_result.device_type
@@ -113,23 +114,23 @@ def compilation_tasks(text=""):
 
             if devices == "ESP8266":
                 # command = f"/bin/bash -i -c get_esp8266  && cd {micropython_dir} && make -C mpy-cross && cd ports/esp8266 && make"
-                # command = f"/bin/bash -i -c 'get_esp8266  && cd {micropython_dir} && make -C mpy-cross && cd ports/esp8266 && make'"
-                # 定义你的命令
-                commands = [
-                    "get_esp8266",
-                    f"cd {micropython_dir}",
-                    "make -C mpy-cross",
-                    "cd ports/esp8266",
-                    "make"
-                ]
-
-                # 创建一个新的 shell 脚本文件
-                with open("esp_8266_script.sh", "w") as file:
-                    file.write("#!/bin/bash\n")
-                    for command in commands:
-                        file.write(command + "\n")
-
-                command = "/bin/bash -i -c 'chmod +x esp_8266_script.sh && sh esp_8266_script.sh'"
+                command = f"/bin/bash -i -c 'get_esp8266  && cd {micropython_dir} && make -C mpy-cross && cd ports/esp8266 && make'"
+                # # 定义你的命令
+                # commands = [
+                #     "get_esp8266",
+                #     f"cd {micropython_dir}",
+                #     "make -C mpy-cross",
+                #     "cd ports/esp8266",
+                #     "make"
+                # ]
+                #
+                # # 创建一个新的 shell 脚本文件
+                # with open("esp_8266_script.sh", "w") as file:
+                #     file.write("#!/bin/bash\n")
+                #     for command in commands:
+                #         file.write(command + "\n")
+                #
+                # command = "/bin/bash -i -c 'chmod +x esp_8266_script.sh && sh esp_8266_script.sh'"
 
             elif devices == "ESP32":
                 command = f"/bin/bash -i -c 'get_esp32' && cd {micropython_dir} && make -C mpy-cross && cd ports/esp32 && make BOARD=ESP32_GENERIC_C3"
@@ -152,10 +153,17 @@ def compilation_tasks(text=""):
             custom_source_code_file_path = first_result.custom_source_code_file_path    # 自定义源码文件路径
             lg.debug(f"custom_source_code_file_path: {custom_source_code_file_path}")
 
+            # 修改状态和更新时间
+            first_result.status = 3  # 假设2代表"编译中"# 编译状态,0:编译成功,1:编译失败,2:编译中,3:等待编译
+            first_result.update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # 更新时间为当前时间
+
+            # 提交更改
+            session.commit()
+
         except:
             # 修改状态和更新时间
             first_result.status = 1
-            # session.commit()
+            session.commit()
             lg.error(f"定时编译失败，原因: \n{traceback.format_exc()}")
 
 
