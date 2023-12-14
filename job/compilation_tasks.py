@@ -132,7 +132,8 @@ def compilation_tasks(text=""):
                     f"cd {micropython_dir}",
                     "make -C mpy-cross",
                     "cd ports/esp32",
-                    "make BOARD=ESP32_GENERIC_C3"
+                    "make submodules",
+                    # "make BOARD=ESP32_GENERIC_C3"
                 ]
 
             # 创建一个新的 shell 脚本文件
