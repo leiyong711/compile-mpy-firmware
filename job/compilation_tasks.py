@@ -166,7 +166,7 @@ def compilation_tasks(text=""):
             lg.info(f"编译成功")
 
             # 固件文件夹名称
-            after_compilation_dir = config.getjson("ProjectConfig.after_compilation_dir", "/res_pack/after_compilation_dir") # 编译后的文件夹名称
+            after_compilation_dir = config.get_jsonpath("ProjectConfig.after_compilation_dir", "/res_pack/after_compilation_dir") # 编译后的文件夹名称
             firmware_folder_name = first_result.email.replace("@", "_at_").replace(".", "_dot_")    # 邮箱作为文件夹名称
             file_name = Path(first_result.custom_source_code_file_path).stem                        # 上传的文件名
 
@@ -180,6 +180,20 @@ def compilation_tasks(text=""):
 
             # 复制上传的源代码压缩包
             shutil.copy(f"{APP_PATH}{first_result.custom_source_code_file_path}", compile_content_file_path)
+
+            # 插入数据库
+            params = {
+                "email": first_result.email,                     # 邮箱
+                "device_type": first_result.device_type,         # 设备类型
+                "flash_size": first_result.flash_size,       # Flash大小
+                "firmware_file_path": f"{compile_content_file_path}/{Path(bin_file_name).name}",  # 固件文件路径
+                "custom_source_code_file_path": f"{compile_content_file_path}/{Path(first_result.custom_source_code_file_path).name}",      # 自定义源码文件路径
+                "remark": first_result.remark,               # 备注
+                "compilation_time_consuming": f"",  # 自定义源码文件路径
+                "retrieve_password": first_result.retrieve_password,  # 自定义源码文件路径
+                "upload_time": f"",  # 自定义源码文件路径
+                "start_compilation_time": f"",  # 自定义源码文件路径
+            }
 
 
 
