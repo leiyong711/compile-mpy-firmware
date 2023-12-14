@@ -42,7 +42,7 @@ def compilation_tasks(text=""):
 
         # 有正在编译的任务，直接返回
         if data_being_compiled:
-            lg.debug(f"有正在编译的任务，直接返回")
+            lg.debug(f"有正在编译的任务，直接结束本次任务")
             return
 
         # 为等待编译的数据创建查询
@@ -54,6 +54,7 @@ def compilation_tasks(text=""):
 
         # 没有需要编译的数据，则直接返回
         if waiting_query.count() == 0:
+            lg.debug(f"没有需要编译的数据，直接结束本次任务")
             return
 
         # 获取结果
@@ -101,7 +102,7 @@ def compilation_tasks(text=""):
             compress_folder(f"{micropython_dir}{device_dir}/modules", f"{micropython_dir}{device_dir}/modules")
 
             # 解压自定义源码文件
-            lg.info(f"解压自定义源码文件")
+            lg.debug(f"解压自定义源码文件")
             decompress_folder(f"{APP_PATH}{first_result.custom_source_code_file_path}", f"{micropython_dir}{device_dir}/modules")
 
             # 删除历史编译的文件目录
@@ -148,7 +149,7 @@ def compilation_tasks(text=""):
 
             if not status:
                 lg.error(f"编译失败，原因：{result}")
-                raise Exception(f"编译失败，原因：{result}")
+                raise Exception(f"编译失败")
 
             # 搜索目标字符串
             if "_GENERIC/firmware.bin" not in result:
@@ -166,7 +167,7 @@ def compilation_tasks(text=""):
                 lg.error(f"编译失败，原因：未在{bin_file_name}中找到bin文件")
                 raise Exception(f"编译失败，原因：未在{bin_file_name}中找到bin文件")
 
-            lg.info(f"编译成功")
+            lg.debug(f"编译成功")
             # 总耗时
             total_time_spent = int((datetime.now() - compilation_start_time).total_seconds() * 1000)
 
@@ -185,7 +186,6 @@ def compilation_tasks(text=""):
 
             # 复制上传的源代码压缩包
             shutil.copy(f"{APP_PATH}{first_result.custom_source_code_file_path}", f"{APP_PATH}{compile_content_file_path}")
-
 
             # 插入数据库
             params = {
@@ -206,35 +206,21 @@ def compilation_tasks(text=""):
             session.commit()
             session.refresh(new_instance)
 
-
-
-            # 获取编译数据
-            # custom_source_code_file_path = first_result.custom_source_code_file_path    # 自定义源码文件路径
-            # lg.debug(f"custom_source_code_file_path: {custom_source_code_file_path}")
-
-            # 修改状态和更新时间
-            # first_result.status = 3  # 假设2代表"编译中"# 编译状态,0:编译成功,1:编译失败,2:编译中,3:等待编译
-            # first_result.update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # 更新时间为当前时间
-
+            # 删除编译成功的数据
             if os.path.exists(f"{APP_PATH}{first_result.custom_source_code_file_path}"):
                 shutil.rmtree(f"{APP_PATH}{first_result.custom_source_code_file_path}")
+                lg.debug(f"编译成功，删除原来的数据")
 
             # 删除原来的数据
             session.delete(first_result)
 
             # 提交更改
             session.commit()
-
-            lg.debug(f"编译成功，删除原来的数据")
-
         except:
             # 修改状态和更新时间
             first_result.status = 1
             session.commit()
             lg.error(f"定时编译失败，原因: \n{traceback.format_exc()}")
-
-
-        lg.info(f"first_result: {first_result.to_dict()}")
     except:
         lg.error(f"定时编译失败，原因: \n{traceback.format_exc()}")
     finally:
@@ -248,7 +234,6 @@ def compilation_tasks(text=""):
                 shutil.rmtree(f"{micropython_dir}{device_dir}/modules")
             except:
                 lg.error(f"删除modules文件夹失败,原因:\n{traceback.format_exc()}")
-
 
 
 if __name__ == '__main__':
