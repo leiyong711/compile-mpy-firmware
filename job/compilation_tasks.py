@@ -6,9 +6,10 @@
 # Email: leiyong711@163.com
 
 import os
+import re
 import shutil
 import traceback
-
+from pathlib import Path
 from sqlalchemy import desc
 from datetime import datetime
 from utils.log import lg
@@ -114,41 +115,72 @@ def compilation_tasks(text=""):
 
             if devices == "ESP8266":
                 # command = f"/bin/bash -i -c get_esp8266  && cd {micropython_dir} && make -C mpy-cross && cd ports/esp8266 && make"
-                # command = f"/bin/bash -i -c 'get_esp8266  && cd {micropython_dir} && make -C mpy-cross && cd ports/esp8266 && make'"
-                # 定义你的命令
-                # commands = [
-                #     "get_esp8266",
-                #     f"cd {micropython_dir}",
-                #     "make -C mpy-cross",
-                #     "cd ports/esp8266",
-                #     "make"
-                # ]
-                #
-                # # 创建一个新的 shell 脚本文件
-                # with open(f"{APP_PATH}/esp_8266_script.sh", "w") as file:
-                #     file.write("#!/bin/bash\n")
-                #     for command in commands:
-                #         file.write(command + "\n")
-
-                # command = f"/bin/bash -i -c 'chmod +x {APP_PATH}/esp_8266_script.sh && sh {APP_PATH}/esp_8266_script.sh'"
-                # command = f"/bin/bash -i -c 'sh {APP_PATH}/esp_8266_script.sh'"
-                command = f"sh {APP_PATH}/esp_8266_script.sh"
+                # 定义 ESP8266 命令
+                commands = [
+                    "get_esp8266",
+                    f"cd {micropython_dir}",
+                    "make -C mpy-cross",
+                    "cd ports/esp8266",
+                    "make"
+                ]
 
             elif devices == "ESP32":
-                command = f"/bin/bash -i -c 'get_esp32' && cd {micropython_dir} && make -C mpy-cross && cd ports/esp32 && make BOARD=ESP32_GENERIC_C3"
+                # 定义 ESP32 命令
+                commands = [
+                    "get_esp32",
+                    f"cd {micropython_dir}",
+                    "make -C mpy-cross",
+                    "cd ports/esp32",
+                    "make BOARD=ESP32_GENERIC_C3"
+                ]
+
+            # 创建一个新的 shell 脚本文件
+            with open(f"{APP_PATH}/build_script.sh", "w") as file:
+                file.write("#!/bin/bash\n")
+                for command in commands:
+                    file.write(command + "\n")
+            command = f"sh {APP_PATH}/build_script.sh"
 
             status, result = excuting_command(command, timeout_seconds=300)
-            if status:
-                # 搜索目标字符串
-                if "_GENERIC/firmware.bin" in result:
-                    lg.debug(result)
-                    lg.info(f"编译成功")
-                else:
-                    lg.error(f"编译失败，原因：{result}")
-                    raise Exception(f"编译失败")
-            else:
+
+            if not status:
+                lg.error(f"编译失败，原因：{result}")
+                raise Exception(f"编译失败，原因：{result}")
+
+            # 搜索目标字符串
+            if "_GENERIC/firmware.bin" not in result:
                 lg.error(f"编译失败，原因：{result}")
                 raise Exception(f"编译失败")
+
+            bin_file_name = re.findall(r"Create (.*?)\.bin", result)
+            if not bin_file_name:
+                lg.error(f"编译失败，原因：编译信息中未找到bin文件")
+                raise Exception(f"编译失败，原因：编译信息中未找到bin文件")
+
+            bin_file_name = f"{micropython_dir}{device_dir}/{bin_file_name[0]}.bin" # bin文件路径
+
+            if not os.path.exists(bin_file_name):
+                lg.error(f"编译失败，原因：未在{bin_file_name}中找到bin文件")
+                raise Exception(f"编译失败，原因：未在{bin_file_name}中找到bin文件")
+
+            lg.info(f"编译成功")
+
+            # 固件文件夹名称
+            after_compilation_dir = config.getjson("ProjectConfig.after_compilation_dir", "/res_pack/after_compilation_dir") # 编译后的文件夹名称
+            firmware_folder_name = first_result.email.replace("@", "_at_").replace(".", "_dot_")    # 邮箱作为文件夹名称
+            file_name = Path(first_result.custom_source_code_file_path).stem                        # 上传的文件名
+
+            # 创建文件夹
+            compile_content_file_path = f"{APP_PATH}/{after_compilation_dir}/{firmware_folder_name}/{file_name}"
+            if not os.path.exists(compile_content_file_path):
+                os.makedirs(compile_content_file_path)
+
+            # 复制编译后的文件
+            shutil.copy(bin_file_name, compile_content_file_path)
+
+            # 复制上传的源代码压缩包
+            shutil.copy(f"{APP_PATH}{first_result.custom_source_code_file_path}", compile_content_file_path)
+
 
 
             # 获取编译数据
