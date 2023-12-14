@@ -147,15 +147,6 @@
                     prop="create_time"
                     label="上传时间">
             </el-table-column>
-            <el-table-column label="操作">
-                <template slot-scope="scope">
-                    <el-button
-                            size="mini"
-                            type="primary"
-                            class="el-icon-download"
-                            @click="handleDownloadSourceFile(scope.$index, scope.row)">下载源代码文件</el-button>
-                </template>
-            </el-table-column>
         </el-table>
         <el-pagination
                 @size-change="handleSizeChange"
@@ -166,13 +157,6 @@
                 :total="total">
         </el-pagination>
 
-        <el-dialog title="请输入提取密码" :visible.sync="isDialogVisible">
-            <el-input v-model="passwordInput" placeholder="请输入提取密码"></el-input>
-            <span slot="footer" class="dialog-footer">
-            <el-button @click="isDialogVisible = false">取 消</el-button>
-            <el-button type="primary" @click="handlePasswordConfirm">确 定</el-button>
-        </span>
-        </el-dialog>
     </template>
 
 </div>
@@ -195,8 +179,6 @@
             tableData: [],
             isDialogVisible: false, // 是否显示密码输入框
             passwordInput: '',    // 密码输入框的值
-            downloadType: 0,    // 下载类型
-            firmwareId: null,   // 要下载的固件的ID
 
             total: 0,
             pageSize: 5,
@@ -246,82 +228,6 @@
                 console.log(`当前页: ${val}`);
                 this.currentPage = val;
                 this.onSubmit();  // 当前页码改变时，重新发送请求
-            },
-            // 下载源文件
-            handleDownloadSourceFile(index, row) {
-                console.log(index, row);
-                this.firmwareId = row.id;
-                this.downloadType = 0;
-                this.passwordInput = '';
-
-                if (row.retrieve_password){
-                    this.isDialogVisible = true;
-                }else{
-                    this.isDialogVisible = false;
-                    this.download()  // 下载
-                }
-            },
-            // 确认密码
-            handlePasswordConfirm() {
-                this.isDialogVisible = false;
-                this.download(this.passwordInput)   // 下载
-            },
-            // 下载
-            download(retrieve_password=null){
-                let params = {
-                    firmware_id: this.firmwareId,  // 固件ID
-                    file_type: this.downloadType,  // 文件类型
-                };
-                if (retrieve_password) {
-                    params.retrieve_password = retrieve_password;
-                };
-
-                axios({
-                    url: '/api/download',
-                    method: 'GET',
-                    responseType: 'arraybuffer',  // 设置响应类型为blob
-                    params: params
-                })
-                    .then(response => {
-                        // 尝试将响应解析为JSON
-                        try {
-                            const json = JSON.parse(new TextDecoder("utf-8").decode(new Uint8Array(response.data)));
-                            if (json.code && json.message) {
-                                // 错误消息
-                                this.$message.error(`Error: ${json.message}`);
-                            }
-                        } catch(e) {
-                            // 如果解析失败，但响应状态码表示成功，那么就处理文件下载
-                            if (response.status >= 200 && response.status < 300) {
-                                const contentDisposition = response.headers['content-disposition'];
-                                if (contentDisposition) {
-                                    const fileNameMatch = contentDisposition.match(/filename="(.+)"/);
-                                    if (fileNameMatch && fileNameMatch.length === 2) {
-                                        const fileName = fileNameMatch[1];
-                                        const blob = new Blob([response.data]);
-                                        const url = window.URL.createObjectURL(blob);
-                                        const link = document.createElement('a');
-                                        link.href = url;
-                                        link.setAttribute('download', fileName);  // 使用从响应头中获取的文件名
-                                        document.body.appendChild(link);
-                                        link.click();
-                                    } else {
-                                        // 错误消息
-                                        // this.$message.error(`Error: 无法检索文件名`);
-                                    }
-                                } else {
-                                    // 错误消息
-                                    // this.$message.error(`Error: 无法检索文件名`);
-                                }
-                            }
-                        }
-                    })
-                    .catch(error => {
-                        this.$message({
-                            message: `下载文件错误: ${error}`,
-                            type: 'error'
-                        });
-                    });
             },
             // 查询
             onSubmit() {
