@@ -208,7 +208,7 @@ def compilation_tasks(text=""):
 
             # 删除编译成功的数据
             if os.path.exists(f"{APP_PATH}{first_result.custom_source_code_file_path}"):
-                shutil.rmtree(f"{APP_PATH}{first_result.custom_source_code_file_path}")
+                os.remove(f"{APP_PATH}{first_result.custom_source_code_file_path}")
                 lg.debug(f"编译成功，删除原来的数据")
 
             # 删除原来的数据
