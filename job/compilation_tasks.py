@@ -176,15 +176,15 @@ def compilation_tasks(text=""):
             file_name = Path(first_result.custom_source_code_file_path).stem                        # 上传的文件名
 
             # 创建文件夹
-            compile_content_file_path = f"{APP_PATH}/{after_compilation_dir}/{firmware_folder_name}/{file_name}"
-            if not os.path.exists(compile_content_file_path):
-                os.makedirs(compile_content_file_path)
+            compile_content_file_path = f"{after_compilation_dir}/{firmware_folder_name}/{file_name}"
+            if not os.path.exists(f"{APP_PATH}{compile_content_file_path}"):
+                os.makedirs(f"{APP_PATH}{compile_content_file_path}")
 
             # 复制编译后的文件
-            shutil.copy(bin_file_name, compile_content_file_path)
+            shutil.copy(bin_file_name, f"{APP_PATH}{compile_content_file_path}")
 
             # 复制上传的源代码压缩包
-            shutil.copy(f"{APP_PATH}{first_result.custom_source_code_file_path}", compile_content_file_path)
+            shutil.copy(f"{APP_PATH}{first_result.custom_source_code_file_path}", f"{APP_PATH}{compile_content_file_path}")
 
 
             # 插入数据库
@@ -215,6 +215,9 @@ def compilation_tasks(text=""):
             # 修改状态和更新时间
             # first_result.status = 3  # 假设2代表"编译中"# 编译状态,0:编译成功,1:编译失败,2:编译中,3:等待编译
             # first_result.update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # 更新时间为当前时间
+
+            if os.path.exists(f"{APP_PATH}{first_result.custom_source_code_file_path}"):
+                shutil.rmtree(f"{APP_PATH}{first_result.custom_source_code_file_path}")
 
             # 删除原来的数据
             session.delete(first_result)

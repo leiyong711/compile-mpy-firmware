@@ -128,7 +128,6 @@ def compress_files(files, output_path):
 
 def compress_folder(folder_path, output_path):
     """压缩文件夹"""
-    lg.warning(folder_path)
     shutil.make_archive(output_path, 'zip', folder_path)
 
 
@@ -206,7 +205,7 @@ def excuting_command(command, timeout_seconds=60):
     :param timeout_seconds:
     :return:
     """
-    lg.debug(f"执行命令：{command}")
+    # lg.debug(f"执行命令：{command}")
     try:
         result = subprocess.run(command, shell=True, timeout=timeout_seconds, check=True, capture_output=True, text=True)
         return True, result.stdout
@@ -227,7 +226,7 @@ def excuting_command_old(command, timeout_seconds=60):
     :param timeout_seconds:
     :return:
     """
-    lg.debug(f"执行命令：{command}")
+    # lg.debug(f"执行命令：{command}")
     # process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     process = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True, executable='/bin/bash')
 
