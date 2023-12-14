@@ -125,12 +125,12 @@ def compilation_tasks(text=""):
                 ]
 
                 # 创建一个新的 shell 脚本文件
-                with open(f"{APP}/esp_8266_script.sh", "w") as file:
+                with open(f"{APP_PATH}/esp_8266_script.sh", "w") as file:
                     file.write("#!/bin/bash\n")
                     for command in commands:
                         file.write(command + "\n")
 
-                command = f"/bin/bash -i -c 'chmod +x {APP}/esp_8266_script.sh && sh {APP}/esp_8266_script.sh'"
+                command = f"/bin/bash -i -c 'chmod +x {APP_PATH}/esp_8266_script.sh && sh {APP_PATH}/esp_8266_script.sh'"
 
             elif devices == "ESP32":
                 command = f"/bin/bash -i -c 'get_esp32' && cd {micropython_dir} && make -C mpy-cross && cd ports/esp32 && make BOARD=ESP32_GENERIC_C3"
