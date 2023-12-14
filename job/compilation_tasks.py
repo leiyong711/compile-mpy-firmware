@@ -130,7 +130,8 @@ def compilation_tasks(text=""):
                     for command in commands:
                         file.write(command + "\n")
 
-                command = f"/bin/bash -i -c 'chmod +x {APP_PATH}/esp_8266_script.sh && sh {APP_PATH}/esp_8266_script.sh'"
+                # command = f"/bin/bash -i -c 'chmod +x {APP_PATH}/esp_8266_script.sh && sh {APP_PATH}/esp_8266_script.sh'"
+                command = f"/bin/bash -i -c 'sh {APP_PATH}/esp_8266_script.sh'"
 
             elif devices == "ESP32":
                 command = f"/bin/bash -i -c 'get_esp32' && cd {micropython_dir} && make -C mpy-cross && cd ports/esp32 && make BOARD=ESP32_GENERIC_C3"

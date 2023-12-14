@@ -20,7 +20,7 @@ config = Config()
 async def lifespan(app):
     scheduler = AsyncIOScheduler()
     scheduler.add_job(func="job.compilation_tasks:compilation_tasks", id="定时编译固件",
-                      args=("定时编译固件",), trigger="interval", seconds=300)
+                      args=("定时编译固件",), trigger="interval", seconds=180)
     scheduler.start()
     lg.info("启动调度器...")
     yield
