@@ -74,20 +74,24 @@ async def validation_exception_handler(request, exc):
 
         # 判断是否为浏览器请求
         if any(keyword in headers for keyword in ["Mozilla", "Chrome", "Safari"]):
+            # 获取请求路径
 
-            path = str(request.url).replace(str(request.base_url), '')  # 获取请求路径
+            # lg.debug(f"\nurl:{request.url}\nbase_url:{request.base_url}\npath: {urlparse(str(request.url)).path}")
+            path = urlparse(str(request.url)).path  # 获取请求路径
             lg.debug(f"请求路径：{path}")
-            if 'favicon.ico' in path:
+            if '/favicon.ico' in path:
                 return JSONResponse({})
-            elif 'logs' in path:
+            elif '/logs' in path:
                 wss_url = "ws://127.0.0.1:65000"
                 return templates.TemplateResponse("index.html", {"request": request, "webSocketURL": wss_url, "url_host": wss_url.replace("wss",'https').replace('ws','http')})
-            elif 'firmwareWaitCompiled' in path:
+            elif '/firmwareWaitCompiled' in path:
                 return templates.TemplateResponse("firmwareWaitCompiled.html", {"request": request})
-            elif 'firmware' in path:
+            elif '/firmware' in path:
                 return templates.TemplateResponse("firmware.html", {"request": request})
-            elif 'upload' in path:
+            elif '/upload' in path:
                 return templates.TemplateResponse("upload.html", {"request": request})
+            elif '/' == path:
+                return templates.TemplateResponse("firmware.html", {"request": request})
 
             return templates.TemplateResponse("404.html", {"request": request, "id": id})
 
