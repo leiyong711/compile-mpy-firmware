@@ -218,7 +218,7 @@ def compilation_tasks(text=""):
             # 创建文件夹
             compile_content_file_path = f"{after_compilation_dir}/{firmware_folder_name}/{file_name}"
             if not os.path.exists(f"{APP_PATH}{compile_content_file_path}"):
-                os.makedirs(f"{APP_PATH}{compile_content_file_path}")
+                os.makedirs(f"{APP_PATH}{compile_content_file_path}", exist_ok=True)
 
             # 复制编译后的文件
             shutil.copy(bin_file_name, f"{APP_PATH}{compile_content_file_path}")

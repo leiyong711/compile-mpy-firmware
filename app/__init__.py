@@ -6,6 +6,7 @@
 # Email: leiyong711@163.com
 
 from utils.log import lg
+from datetime import datetime
 from fastapi import FastAPI
 from utils.config import Config
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,8 +20,10 @@ config = Config()
 @asynccontextmanager
 async def lifespan(app):
     scheduler = AsyncIOScheduler()
-    # scheduler.add_job(func="job.compilation_tasks:compilation_tasks", id="定时编译固件",
-    #                   args=("定时编译固件",), trigger="interval", seconds=180)
+    # 指定任务的立即执行时间为当前时间
+    immediate_run_time = datetime.now()
+    scheduler.add_job(func="job.compilation_tasks:compilation_tasks", id="定时编译固件",
+                      args=("定时编译固件",), trigger="interval", seconds=180, next_run_time=immediate_run_time)
     scheduler.start()
     lg.info("启动调度器...")
     yield
