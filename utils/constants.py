@@ -27,17 +27,17 @@ CONTRIB_PATH = os.path.expanduser(os.getenv("PLUGIN_CONFIG", "~/.compile-mpy-fir
 CUSTOM_PATH = os.path.expanduser(os.getenv("PLUGIN_CONFIG", "~/.compile-mpy-firmware/custom"))
 
 
-lg.debug(f"APP_PATH: {APP_PATH}")
-lg.debug(f"LIB_PATH: {LIB_PATH}")
-lg.debug(f"DATA_PATH: {DATA_PATH}")
-lg.debug(f"TEMP_PATH: {TEMP_PATH}")
-lg.debug(f"TEMPLATE_PATH: {TEMPLATE_PATH}")
-lg.debug(f"PLUGIN_PATH: {PLUGIN_PATH}")
-lg.debug(f"DEFAULT_CONFIG_NAME: {DEFAULT_CONFIG_NAME}")
-lg.debug(f"CUSTOM_CONFIG_NAME: {CUSTOM_CONFIG_NAME}")
-lg.debug(f"CONFIG_PATH: {CONFIG_PATH}")
-lg.debug(f"CONTRIB_PATH: {CONTRIB_PATH}")
-lg.debug(f"CUSTOM_PATH: {CUSTOM_PATH}")
+# lg.debug(f"APP_PATH: {APP_PATH}")
+# lg.debug(f"LIB_PATH: {LIB_PATH}")
+# lg.debug(f"DATA_PATH: {DATA_PATH}")
+# lg.debug(f"TEMP_PATH: {TEMP_PATH}")
+# lg.debug(f"TEMPLATE_PATH: {TEMPLATE_PATH}")
+# lg.debug(f"PLUGIN_PATH: {PLUGIN_PATH}")
+# lg.debug(f"DEFAULT_CONFIG_NAME: {DEFAULT_CONFIG_NAME}")
+# lg.debug(f"CUSTOM_CONFIG_NAME: {CUSTOM_CONFIG_NAME}")
+# lg.debug(f"CONFIG_PATH: {CONFIG_PATH}")
+# lg.debug(f"CONTRIB_PATH: {CONTRIB_PATH}")
+# lg.debug(f"CUSTOM_PATH: {CUSTOM_PATH}")
 
 
 def getConfigPath():
