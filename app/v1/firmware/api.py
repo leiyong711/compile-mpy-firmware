@@ -128,7 +128,7 @@ async def get_firmware_wait_compiled_list(*,
                             db: Session = Depends(get_db)):
 
     flash_size_mapping = {"all": None, "2M": "2M", "4M": "4M", "8M": "8M", "16M": "16M"}
-    device_type_mapping = {"all": None, "ESP8266": "ESP8266", "ESP32": "ESP32"}
+    device_type_mapping = {"all": None, "ESP8266": "ESP8266", "ESP32_S2": "ESP32_S2", "ESP32_S3": "ESP32_S3", "ESP32_C3": "ESP32_C3"}
 
     flash_size = flash_size_mapping.get(flash_size, None)
     device_type = device_type_mapping.get(device_type, None)
@@ -196,7 +196,7 @@ async def get_firmware_list(*,
     # db.refresh(new_instance)
 
     flash_size_mapping = {"all": None, "2M": "2M", "4M": "4M", "8M": "8M", "16M": "16M"}
-    device_type_mapping = {"all": None, "ESP8266": "ESP8266", "ESP32": "ESP32"}
+    device_type_mapping = {"all": None, "ESP8266": "ESP8266", "ESP32_S2": "ESP32_S2", "ESP32_S3": "ESP32_S3", "ESP32_C3": "ESP32_C3"}
 
     flash_size = flash_size_mapping.get(flash_size, None)
     device_type = device_type_mapping.get(device_type, None)

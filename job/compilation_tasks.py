@@ -125,16 +125,24 @@ def compilation_tasks(text=""):
                     "make"
                 ]
 
-            elif devices == "ESP32":
+            elif devices.startswith("ESP32_"):
                 # 定义 ESP32 命令
                 commands = [
-                    "get_esp32",
+                    "get_idf",
                     f"cd {micropython_dir}",
                     "make -C mpy-cross",
                     "cd ports/esp32",
-                    "make submodules",
-                    # "make BOARD=ESP32_GENERIC_C3"
+                    # "make submodules",
                 ]
+
+                if devices == "ESP32_S2":
+                    commands.append("make BOARD=GENERIC_S2 clean")
+                elif devices == "ESP32_S3":
+                    commands.append("make BOARD=GENERIC_S3 clean")
+                elif devices == "ESP32_C3":
+                    commands.append("make BOARD=ESP32_GENERIC_C3 clean")
+                else:
+                    commands.append("make submodules clean")
 
             # 创建一个新的 shell 脚本文件
             with open(f"{APP_PATH}/build_script.sh", "w") as file:
@@ -152,17 +160,34 @@ def compilation_tasks(text=""):
                 lg.error(f"编译失败，原因：{result}")
                 raise Exception(f"编译失败")
 
-            # 搜索目标字符串
-            if "_GENERIC/firmware.bin" not in result:
-                lg.error(f"编译失败，原因：{result}")
-                raise Exception(f"编译失败")
+            if devices == "ESP8266":
+                # 搜索目标字符串
+                if "_GENERIC/firmware.bin" not in result:
+                    lg.error(f"编译失败，原因：{result}")
+                    raise Exception(f"编译失败")
 
-            bin_file_name = re.findall(r"Create (.*?)\.bin", result)
-            if not bin_file_name:
-                lg.error(f"编译失败，原因：编译信息中未找到bin文件")
-                raise Exception(f"编译失败，原因：编译信息中未找到bin文件")
+                bin_file_name = re.findall(r"Create (.*?)\.bin", result)
+                if not bin_file_name:
+                    lg.error(f"编译失败，原因：编译信息中未找到bin文件")
+                    raise Exception(f"编译失败，原因：编译信息中未找到bin文件")
 
-            bin_file_name = f"{micropython_dir}{device_dir}/{bin_file_name[0]}.bin" # bin文件路径
+                bin_file_name = f"{micropython_dir}{device_dir}/{bin_file_name[0]}.bin" # bin文件路径
+
+                if not os.path.exists(bin_file_name):
+                    lg.error(f"编译失败，原因：未在{bin_file_name}中找到bin文件")
+                    raise Exception(f"编译失败，原因：未在{bin_file_name}中找到bin文件")
+            elif devices.startswith("ESP32_"):
+                # 搜索目标字符串
+                if "Project build complete. To flash, run this command:" not in result:
+                    lg.error(f"编译失败，原因：{result}")
+                    raise Exception(f"编译失败")
+
+                bin_file_name = re.findall(r"esp32/(.*?)/micropython\.bin", result)
+                if not bin_file_name:
+                    lg.error(f"编译失败，原因：编译信息中未找到bin文件")
+                    raise Exception(f"编译失败，原因：编译信息中未找到bin文件")
+
+                bin_file_name = f"{micropython_dir}{device_dir}/{bin_file_name[0]}/firmware.bin" # bin文件路径
 
             if not os.path.exists(bin_file_name):
                 lg.error(f"编译失败，原因：未在{bin_file_name}中找到bin文件")
