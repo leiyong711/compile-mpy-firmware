@@ -263,6 +263,8 @@ def compilation_tasks(text=""):
             session.commit()
             lg.error(f"定时编译失败，原因: \n{traceback.format_exc()}")
     except:
+        # 回滚
+        session.rollback()
         lg.error(f"定时编译失败，原因: \n{traceback.format_exc()}")
     finally:
         if hasattr(session, "close"):
