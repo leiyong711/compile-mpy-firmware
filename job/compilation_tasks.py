@@ -118,6 +118,11 @@ def compilation_tasks(text=""):
                 # command = f"/bin/bash -i -c get_esp8266  && cd {micropython_dir} && make -C mpy-cross && cd ports/esp8266 && make"
                 # 定义 ESP8266 命令
                 commands = [
+                    "# 加载.profile",
+                    "if [ -f ~/.profile ]; then",
+                    "    . ~/.profile",
+                    "fi",
+                    ""
                     "get_esp8266",
                     f"cd {micropython_dir}",
                     "make -C mpy-cross",
@@ -128,6 +133,11 @@ def compilation_tasks(text=""):
             elif devices.startswith("ESP32_"):
                 # 定义 ESP32 命令
                 commands = [
+                    "# 加载.profile",
+                    "if [ -f ~/.profile ]; then",
+                    "    . ~/.profile",
+                    "fi",
+                    ""
                     "get_idf",
                     f"cd {micropython_dir}",
                     "make -C mpy-cross",
