@@ -281,6 +281,15 @@ def compilation_tasks(text=""):
             except:
                 lg.error(f"删除modules文件夹失败,原因:\n{traceback.format_exc()}")
 
+            # 删除历史编译的文件目录
+            matches = find_dirs(f"{micropython_dir}{device_dir}", "build*", 0)
+            for build_path in matches:
+                lg.debug(f"删除编译的文件目录 {build_path}")
+                try:
+                    shutil.rmtree(build_path)
+                except:
+                    ...
+
 if __name__ == '__main__':
     compilation_tasks()
     # backup_modules()
