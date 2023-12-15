@@ -23,7 +23,7 @@ async def lifespan(app):
     # 指定任务的立即执行时间为当前时间
     immediate_run_time = datetime.now()
     scheduler.add_job(func="job.compilation_tasks:compilation_tasks", id="定时编译固件",
-                      args=("定时编译固件",), trigger="interval", seconds=180, next_run_time=immediate_run_time)
+                      args=("定时编译固件",), trigger="interval", seconds=60, next_run_time=immediate_run_time)
     scheduler.start()
     lg.info("启动调度器...")
     yield
