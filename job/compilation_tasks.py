@@ -82,7 +82,7 @@ def compilation_tasks(text=""):
                 if not device_dir:
                     raise Exception("esp8266目录不存在")
 
-            elif devices == "ESP32":
+            elif devices.startswith("ESP32_"):
                 device_dir = config.get_jsonpath('$.ProjectConfig.esp32_dir')
                 if not device_dir:
                     raise Exception("esp32目录不存在")
@@ -160,6 +160,8 @@ def compilation_tasks(text=""):
                 for command in commands:
                     file.write(command + "\n")
             command = f"sh {APP_PATH}/build_script.sh"
+
+            lg.debug(f"开始进行固件编译")
 
             # 编译开始时间
             compilation_start_time = datetime.now()
