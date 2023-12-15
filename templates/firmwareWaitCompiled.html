@@ -137,7 +137,7 @@
             <el-table-column label="编译状态">
                 {% raw %}
                 <template v-slot="{ row }">
-                    <el-tag :type="getTagType(row.status)">{{ getTagText(row.status) }}</el-tag>
+                    <el-tag :type="getTagType(row.status)"  @click="showErrorModal(row.err_log)">{{ getTagText(row.status) }}</el-tag>
                 </template>
                 {% endraw %}
             </el-table-column>
@@ -158,6 +158,14 @@
                 :page-size="5"
                 :total="total">
         </el-pagination>
+
+        <el-dialog
+                title="错误日志"
+                :visible.sync="isDialogVisible"
+                width="30%"
+                :before-close="handleDialogClose">
+            <pre style="color: red">{{ errorLog }}</pre>
+        </el-dialog>
 
     </template>
 
@@ -180,7 +188,7 @@
             },
             tableData: [],
             isDialogVisible: false, // 是否显示密码输入框
-            passwordInput: '',    // 密码输入框的值
+            errorLog: '',    // 错误日志内容
 
             total: 0,
             pageSize: 5,
@@ -191,6 +199,18 @@
             this.onSubmit();  // 页面加载时发送请求
         },
         methods: {
+            // 显示模态框
+            showErrorModal(errLog) {
+                if (errLog && errLog.trim() !== '') {
+                    this.isDialogVisible = true;  // 显示模态框
+                    this.errorLog = errLog;  // 将错误日志保存到数据中
+                }
+            },
+            // 关闭模态框
+            handleDialogClose(done) {
+                this.errorLog = '';  // 清空错误日志
+                done();  // 关闭模态框
+            },
             getTagType(status) {
                 switch (status) {
                     case 0:

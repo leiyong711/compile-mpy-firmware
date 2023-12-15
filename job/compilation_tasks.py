@@ -36,6 +36,7 @@ def compilation_tasks(text=""):
     session = next(get_db())
     micropython_dir = ""
     device_dir = ""
+    err_log = ""
     try:
         # 正在编译的数据
         data_being_compiled = session.query(FirmwareWaitCompiled).filter(FirmwareWaitCompiled.status == 2).order_by(FirmwareWaitCompiled.update_time).all()
@@ -94,7 +95,7 @@ def compilation_tasks(text=""):
                     raise Exception(f"{micropython_dir}{device_dir}/modules文件夹不存在,且modules.zip文件不存在")
 
                 # 解压备份文件
-                lg.info(f"{micropython_dir}{device_dir}文件夹不存在，解压备份文件")
+                lg.debug(f"{micropython_dir}{device_dir}文件夹不存在，解压备份文件")
                 decompress_folder(f"{micropython_dir}{device_dir}/modules.zip", f"{micropython_dir}{device_dir}/modules")
 
             # 备份modules
@@ -108,7 +109,7 @@ def compilation_tasks(text=""):
             # 删除历史编译的文件目录
             matches = find_dirs(f"{micropython_dir}{device_dir}", "build*", 0)
             for build_path in matches:
-                lg.warning(f"删除历史编译的文件目录 {build_path}")
+                lg.debug(f"删除历史编译的文件目录 {build_path}")
                 try:
                     shutil.rmtree(build_path)
                 except:
@@ -260,6 +261,8 @@ def compilation_tasks(text=""):
         except:
             # 修改状态和更新时间
             first_result.status = 1
+            err_log = traceback.format_exc()
+            first_result.err_log = err_log
             session.commit()
             lg.error(f"定时编译失败，原因: \n{traceback.format_exc()}")
     except:
@@ -277,7 +280,6 @@ def compilation_tasks(text=""):
                 shutil.rmtree(f"{micropython_dir}{device_dir}/modules")
             except:
                 lg.error(f"删除modules文件夹失败,原因:\n{traceback.format_exc()}")
-
 
 if __name__ == '__main__':
     compilation_tasks()

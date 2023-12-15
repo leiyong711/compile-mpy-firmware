@@ -45,6 +45,7 @@ class FirmwareWaitCompiled(Base):
     retrieve_password = Column(String(255), nullable=True, comment='提取密码')                         # 提取密码
     remark = Column(Text, nullable=True, comment='备注')                                               # 备注
     status = Column(Integer, default=3, nullable=False, comment='编译状态')                            # 编译状态,0:编译成功,1:编译失败,2:编译中,3:等待编译
+    err_log = Column(Text, nullable=True, comment='错误日志')                                           # 错误日志
     update_time = Column(String(255), nullable=True, comment='更新时间')                               # 更新时间
     create_time = Column(DateTime, default=datetime.datetime.now, comment='创建时间')                  # 创建时间
 

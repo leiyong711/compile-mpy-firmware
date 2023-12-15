@@ -58,7 +58,6 @@ async def upload_file(
     upload_dir = config.get_jsonpath("ProjectConfig.upload_dir", 'upload')
     temporary_folder = f"{APP_PATH}{upload_dir}/{filename_dir}"
     try:
-        lg.debug(f"temporary_folder: {temporary_folder}")
 
         if not os.path.exists(temporary_folder):
             os.makedirs(temporary_folder)
@@ -98,14 +97,10 @@ async def upload_file(
         # 获取新记录的 ID
         new_instance_id = new_instance.id
 
-        lg.debug(f"收到文件：{files}\t设备: {device_type}\t大小: {flash_size}\t邮箱：{email}\t密码：{password}\t备注：{remark}")
-
-        # 进行其他操作，比如处理文件内容、保存文件路径到数据库等
-        # ...
-
+        # lg.debug(f"收到文件：{files}\t设备: {device_type}\t大小: {flash_size}\t邮箱：{email}\t密码：{password}\t备注：{remark}")
         return {"data": {"id": new_instance_id, "msg": "创建编译任务成功"}}
     except:
-        lg.error(traceback.format_exc())
+        lg.error(f"创建编译任务异常：{traceback.format_exc()}")
         raise UnicornException(code=50000, message="上传异常，请重试")
     finally:
         # 删除临时文件夹
@@ -152,15 +147,15 @@ async def get_firmware_wait_compiled_list(*,
             total = firmware_wait_compiled.count()
         except UnboundLocalError:
             total = 0
-        lg.debug(f"page: {page}\tlimit: {limit}\ttotal: {total}")
+
         try:
             items = firmware_wait_compiled.offset((page - 1) * limit).limit(limit).all()
         except UnboundLocalError:
             items = []
-        # lg.debug({"data": {"items": items, "total": total}})
+
         return {"data": {"items": items, "total": total}}
     except:
-        lg.error(traceback.format_exc())
+        lg.error(f"查询待编译固件列表异常：{traceback.format_exc()}")
         raise UnicornException(message="系统内部错误")
     finally:
         if hasattr(db, "close"):
@@ -220,15 +215,15 @@ async def get_firmware_list(*,
             total = firmware.count()
         except UnboundLocalError:
             total = 0
-        lg.debug(f"page: {page}\tlimit: {limit}\ttotal: {total}")
+
         try:
             items = firmware.offset((page - 1) * limit).limit(limit).all()
         except UnboundLocalError:
             items = []
-        # lg.debug({"data": {"items": items, "total": total}})
+
         return {"data": {"items": items, "total": total}}
     except:
-        lg.error(traceback.format_exc())
+        lg.error(f"查询已编译固件列表异常：{traceback.format_exc()}")
         raise UnicornException(message="系统内部错误")
     finally:
         if hasattr(db, "close"):
@@ -262,7 +257,6 @@ async def download_file(
         else:
             file_path = f"{APP_PATH}{firmware.custom_source_code_file_path}"
             file_name = os.path.basename(file_path)
-        lg.debug(f"file_path: {file_path}\tfile_name: {file_name}")
 
         # 判断文件是否存在
         if not os.path.exists(file_path):
