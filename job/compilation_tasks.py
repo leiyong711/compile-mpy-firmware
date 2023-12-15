@@ -146,13 +146,13 @@ def compilation_tasks(text=""):
                 ]
 
                 if devices == "ESP32_S2":
-                    commands.append("make BOARD=GENERIC_S2 clean")
+                    commands.append("make BOARD=ESP32_GENERIC_S2")
                 elif devices == "ESP32_S3":
-                    commands.append("make BOARD=GENERIC_S3 clean")
+                    commands.append("make BOARD=ESP32_GENERIC_S3")
                 elif devices == "ESP32_C3":
-                    commands.append("make BOARD=ESP32_GENERIC_C3 clean")
+                    commands.append("make BOARD=ESP32_GENERIC_C3")
                 else:
-                    commands.append("make submodules clean")
+                    commands.append("make submodules")
 
             # 创建一个新的 shell 脚本文件
             with open(f"{APP_PATH}/build_script.sh", "w") as file:
