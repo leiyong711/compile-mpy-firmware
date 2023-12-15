@@ -154,7 +154,7 @@ def compilation_tasks(text=""):
             # 编译开始时间
             compilation_start_time = datetime.now()
 
-            status, result = excuting_command(command, timeout_seconds=300)
+            status, result = excuting_command(command, timeout_seconds=600)
 
             if not status:
                 lg.error(f"编译失败，原因：{result}")
