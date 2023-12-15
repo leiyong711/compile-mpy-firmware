@@ -154,6 +154,7 @@ def compilation_tasks(text=""):
                 else:
                     commands.append("make submodules")
 
+            lg.debug(f"开始生成编译脚本")
             # 创建一个新的 shell 脚本文件
             with open(f"{APP_PATH}/build_script.sh", "w") as file:
                 file.write("#!/bin/bash\n")
