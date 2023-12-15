@@ -115,7 +115,8 @@
                 style="width: 100%">
             <el-table-column
                     prop="id"
-                    label="固件ID">
+                    label="固件ID"
+                    width="65">
             </el-table-column>
             <el-table-column
                     prop="email"
@@ -125,12 +126,12 @@
             <el-table-column
                     prop="device_type"
                     label="设备类型"
-                    width="180">
+                    width="120">
             </el-table-column>
             <el-table-column
                     prop="flash_size"
                     label="闪存大小"
-                    width="180">
+                    width="100">
             </el-table-column>
             <el-table-column
                     prop="remark"
@@ -139,7 +140,8 @@
             <el-table-column
                     prop="compilation_time_consuming"
                     label="编译耗时"
-                    :formatter="formatMillisecondsToTime">
+                    :formatter="formatMillisecondsToTime"
+                    width="90">
             </el-table-column>
             <el-table-column
                     prop="upload_time"

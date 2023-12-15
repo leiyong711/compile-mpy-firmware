@@ -115,7 +115,8 @@
                 style="width: 100%">
             <el-table-column
                     prop="id"
-                    label="任务ID">
+                    label="任务ID"
+                    width="65">
             </el-table-column>
             <el-table-column
                     prop="email"
@@ -123,17 +124,19 @@
             </el-table-column>
             <el-table-column
                     prop="device_type"
-                    label="设备类型">
+                    label="设备类型"
+                    width="120">
             </el-table-column>
             <el-table-column
                     prop="flash_size"
-                    label="闪存大小">
+                    label="闪存大小"
+                    width="100">
             </el-table-column>
             <el-table-column
                     prop="remark"
                     label="备注">
             </el-table-column>
-            <el-table-column label="编译状态">
+            <el-table-column label="编译状态" width="90">
                 {% raw %}
                 <template v-slot="{ row }">
                     <el-tag :type="getTagType(row.status)"  @click="showErrorModal(row.err_log)">{{ getTagText(row.status) }}</el-tag>
@@ -142,11 +145,13 @@
             </el-table-column>
             <el-table-column
                     prop="update_time"
-                    label="状态变更时间">
+                    label="状态变更时间"
+                    width="160">
             </el-table-column>
             <el-table-column
                     prop="create_time"
-                    label="上传时间">
+                    label="上传时间"
+                    width="160">
             </el-table-column>
         </el-table>
         <el-pagination

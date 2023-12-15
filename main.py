@@ -33,6 +33,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
 _session = get_session()
+app = create_app()
 
 # 屏蔽定时任务INFO级日志
 logging.basicConfig()
@@ -45,7 +46,6 @@ logging.getLevelName(os.environ.get("LOG_LEVEL", "ERROR"))
 logging.getLogger('uvicorn').setLevel(logging.ERROR)
 logging.getLevelName(os.environ.get("LOG_LEVEL", "ERROR"))
 
-app = create_app()
 
 # 创建一个templates（模板）对象，以后可以重用。
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -75,10 +75,8 @@ async def validation_exception_handler(request, exc):
         # 判断是否为浏览器请求
         if any(keyword in headers for keyword in ["Mozilla", "Chrome", "Safari"]):
             # 获取请求路径
-
-            # lg.debug(f"\nurl:{request.url}\nbase_url:{request.base_url}\npath: {urlparse(str(request.url)).path}")
             path = urlparse(str(request.url)).path  # 获取请求路径
-            lg.debug(f"请求路径：{path}")
+            # lg.debug(f"请求路径：{path}")
             if '/favicon.ico' in path:
                 return JSONResponse({})
             elif '/logs' in path:
