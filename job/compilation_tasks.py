@@ -164,10 +164,12 @@ def compilation_tasks(text=""):
 
             lg.debug(f"开始进行固件编译")
 
+            build_timeout_seconds = config.get_jsonpath("ProjectConfig.build_timeout_seconds", 1200)  # 编译超时时间
+
             # 编译开始时间
             compilation_start_time = datetime.now()
 
-            status, result = excuting_command(command, timeout_seconds=600)
+            status, result = excuting_command(command, timeout_seconds=build_timeout_seconds)
 
             if not status:
                 lg.error(f"编译失败，原因：{result}")

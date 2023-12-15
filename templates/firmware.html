@@ -139,7 +139,8 @@
             </el-table-column>
             <el-table-column
                     prop="compilation_time_consuming"
-                    label="编译耗时">
+                    label="编译耗时(秒)">
+                    :formatter="formatMillisecondsToTime">
             </el-table-column>
             <el-table-column
                     prop="upload_time"
@@ -209,6 +210,15 @@
         },
         mounted() {
             this.onSubmit();  // 页面加载时发送请求
+        },
+        filters: {
+            formatMillisecondsToTime(ms) {
+                // 将毫秒转换为时:分:秒格式
+                const hours = Math.floor((ms / (1000 * 60 * 60)) % 24);
+                const minutes = Math.floor((ms / (1000 * 60)) % 60);
+                const seconds = Math.floor((ms / 1000) % 60);
+                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
         },
         methods: {
             // 每页显示条数改变时触发
