@@ -153,7 +153,8 @@ def compilation_tasks(text=""):
                 elif devices == "ESP32_C3":
                     commands.append("make BOARD=ESP32_GENERIC_C3")
                 else:
-                    commands.append("make submodules")
+                    # commands.append("make submodules")
+                    commands.append("make")
 
             lg.debug(f"开始生成编译脚本")
             # 创建一个新的 shell 脚本文件
