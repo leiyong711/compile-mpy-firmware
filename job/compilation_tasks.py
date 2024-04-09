@@ -139,7 +139,7 @@ def compilation_tasks(text=""):
                     "    . ~/.profile",
                     "fi",
                     ""
-                    "get_idf",
+                    "get_idf_5_0_4",
                     f"cd {micropython_dir}",
                     "make -C mpy-cross",
                     "cd ports/esp32",
