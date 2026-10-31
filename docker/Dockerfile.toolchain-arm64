@@ -1,0 +1,27 @@
+FROM debian:11-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    IDF_TOOLS_PATH=/root/.espressif \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
+
+RUN sed -i 's|http://deb.debian.org/debian-security|http://archive.debian.org/debian-security|g; s|http://deb.debian.org/debian|http://archive.debian.org/debian|g; /bullseye-updates/d' /etc/apt/sources.list \
+    && apt-get -o Acquire::Check-Valid-Until=false update \
+    && apt-get install -y --no-install-recommends \
+       bash binutils-xtensa-lx106 build-essential ca-certificates ccache cmake curl \
+       dfu-util flex bison gperf gcc-xtensa-lx106 git libffi-dev libssl-dev \
+       libusb-1.0-0-dev ninja-build picolibc-xtensa-lx106-elf pkg-config \
+       python3 python3-pip python3-venv wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# 该上下文由 docker/prepare-toolchain-context.sh 从已经验证的树莓派环境生成。
+COPY esp-idf-v5.0.4 /opt/esp-idf-v5.0.4
+COPY espressif /root/.espressif
+COPY esp-open-sdk /opt/esp-open-sdk
+COPY micropython /opt/micropython
+
+RUN find /opt/micropython -type d -name 'build-*' -prune -exec rm -rf '{}' + \
+    && find /opt/micropython -type d -name '.git' -prune -exec rm -rf '{}' + \
+    && find /opt/esp-idf-v5.0.4 -type d -name '.git' -prune -exec rm -rf '{}' + \
+    && find /root/.espressif -type d -name '__pycache__' -prune -exec rm -rf '{}' +
+

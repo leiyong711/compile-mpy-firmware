@@ -5,6 +5,7 @@
 # creation time: 2023-11-28 20:03
 # Email: leiyong711@163.com
 
+import asyncio
 import io
 import os
 import shutil
@@ -12,15 +13,22 @@ import traceback
 import threading
 from utils.log import lg
 from utils.config import Config
-from utils.constants import APP_PATH
+from utils.constants import RUNTIME_PATH
 from utils.tools import generate_random_number, compress_folder, sign_md5
 from utils.exception_handling import *
 from typing import List
+from .build_options import (
+    discover_build_options,
+    normalize_device_type,
+    normalize_flash_size,
+    validate_selection,
+)
 from .db_model import Firmware, FirmwareWaitCompiled, text
 from .api_model import CreateCompilationTaskOUT, GetFirmwareListOut, GetFirmwareWaitCompiledListOut
 from dbs.sqlite_connect import SessionLocal, Session
-from fastapi import APIRouter, Request, File, UploadFile, Form, Depends, Query
+from fastapi import APIRouter, Request, File, UploadFile, Form, Depends, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, Response, JSONResponse, StreamingResponse
+from job.build_progress import get_progress, set_progress
 # from fastapi.responses import JSONRespons
 
 
@@ -36,12 +44,57 @@ def get_db():
     finally:
         db.close()
 
-@app.post("/test")
-async def test(commond: str = File(..., title="命令"),):
-    from utils.tools import excuting_command
-    status, result = excuting_command(commond, timeout_seconds=300)
-    lg.debug(f"status: {status}\tresult: {result}")
-    return JSONResponse({"status": status, "result": result})
+@app.get("/build-options", summary="获取当前环境可用的芯片、开发板和编译参数")
+async def get_build_options():
+    return {"code": 2000, "status": True, "message": "success", "data": discover_build_options()}
+
+
+@app.get("/progress/{task_id}", summary="查询编译进度")
+async def get_build_progress(task_id: int):
+    progress = get_progress(task_id)
+    if progress is None:
+        raise UnicornException(code=404, message="编译任务不存在")
+    return {"code": 2000, "status": True, "message": "success", "data": progress}
+
+
+@app.websocket("/ws/progress/{task_id}")
+async def progress_websocket(websocket: WebSocket, task_id: int):
+    """进度落库后再推送，刷新页面或多进程部署都不会丢状态。"""
+    await websocket.accept()
+    last_payload = None
+    try:
+        while True:
+            progress = get_progress(task_id)
+            if progress is None:
+                payload = {
+                    "task_id": task_id,
+                    "percentage": 0,
+                    "stage": "unknown",
+                    "message": "编译任务不存在",
+                    "status": "failed",
+                    "current_step": 0,
+                    "total_steps": 0,
+                }
+            else:
+                if progress.get("updated_at"):
+                    progress["updated_at"] = progress["updated_at"].isoformat()
+                payload = progress
+
+            signature = (
+                payload.get("percentage"),
+                payload.get("stage"),
+                payload.get("message"),
+                payload.get("status"),
+            )
+            if signature != last_payload:
+                await websocket.send_json(payload)
+                last_payload = signature
+            if payload.get("status") in ("success", "failed"):
+                await websocket.close(code=1000)
+                return
+            await asyncio.sleep(0.35)
+    except WebSocketDisconnect:
+        return
 
 
 @app.post("/upload", tags=[], summary="创建编译任务", response_model=CreateCompilationTaskOUT, responses={422: {'model': ErrorOUt}})
@@ -49,6 +102,8 @@ async def upload_file(
         files: List[UploadFile] = File(..., title="待编译固件文件"),
         device_type: str = Form(..., title="设备类型"),
         flash_size: str = Form(..., title="Flash大小"),
+        board: str = Form('', title="开发板"),
+        board_variant: str = Form('', title="开发板变体"),
         email: str = Form(..., title="邮箱"),
         password: str = Form('', title="提取密码"),
         remark: str = Form('', title="备注"),
@@ -56,15 +111,22 @@ async def upload_file(
 ):
     filename_dir = generate_random_number()
     upload_dir = config.get_jsonpath("ProjectConfig.upload_dir", 'upload')
-    temporary_folder = f"{APP_PATH}{upload_dir}/{filename_dir}"
+    temporary_folder = f"{RUNTIME_PATH}{upload_dir}/{filename_dir}"
     try:
+
+        try:
+            selection = validate_selection(device_type, flash_size, board, board_variant)
+        except ValueError as exc:
+            raise UnicornException(code=4000, message=str(exc))
 
         if not os.path.exists(temporary_folder):
             os.makedirs(temporary_folder)
 
         for file in files:
             # 获取文件的原始文件名
-            filename = file.filename
+            filename = os.path.basename(file.filename or "")
+            if not filename:
+                raise UnicornException(code=4000, message="上传文件名不能为空")
             # 构建保存文件的路径
             save_path = os.path.join(temporary_folder, filename)
 
@@ -78,8 +140,10 @@ async def upload_file(
 
         params = {
             "email": email,                 # 邮箱
-            "device_type": device_type,  # 设备类型
-            "flash_size": flash_size,       # Flash大小
+            "device_type": selection.device_type,
+            "flash_size": selection.flash_size,
+            "board": selection.board,
+            "board_variant": selection.board_variant,
             "status": 3,                    # 编译状态,0:编译成功,1:编译失败,2:编译中,3:等待编译
             "remark": remark,               # 备注
             "custom_source_code_file_path": f"{upload_dir}/{filename_dir}.zip",  # 自定义源码文件路径
@@ -96,10 +160,13 @@ async def upload_file(
 
         # 获取新记录的 ID
         new_instance_id = new_instance.id
+        set_progress(new_instance_id, 0, "queued", "任务已进入编译队列", status="queued")
 
         # lg.debug(f"收到文件：{files}\t设备: {device_type}\t大小: {flash_size}\t邮箱：{email}\t密码：{password}\t备注：{remark}")
         return {"data": {"id": new_instance_id, "msg": "创建编译任务成功"}}
-    except:
+    except UnicornException:
+        raise
+    except Exception:
         lg.error(f"创建编译任务异常：{traceback.format_exc()}")
         raise UnicornException(code=50000, message="上传异常，请重试")
     finally:
@@ -122,11 +189,8 @@ async def get_firmware_wait_compiled_list(*,
                             sort: str = Query(..., title="排序方式", example="+id"),
                             db: Session = Depends(get_db)):
 
-    flash_size_mapping = {"all": None, "2M": "2M", "4M": "4M", "8M": "8M", "16M": "16M"}
-    device_type_mapping = {"all": None, "ESP8266": "ESP8266", "ESP32_S": "ESP32_S", "ESP32_S2": "ESP32_S2", "ESP32_S3": "ESP32_S3", "ESP32_C3": "ESP32_C3"}
-
-    flash_size = flash_size_mapping.get(flash_size, None)
-    device_type = device_type_mapping.get(device_type, None)
+    flash_size = None if flash_size in (None, "", "all") else normalize_flash_size(flash_size)
+    device_type = None if device_type in (None, "", "all") else normalize_device_type(device_type)
 
     try:
         if sort == "+id":
@@ -190,11 +254,8 @@ async def get_firmware_list(*,
     # db.commit()
     # db.refresh(new_instance)
 
-    flash_size_mapping = {"all": None, "2M": "2M", "4M": "4M", "8M": "8M", "16M": "16M"}
-    device_type_mapping = {"all": None, "ESP8266": "ESP8266", "ESP32_S": "ESP32_S", "ESP32_S2": "ESP32_S2", "ESP32_S3": "ESP32_S3", "ESP32_C3": "ESP32_C3"}
-
-    flash_size = flash_size_mapping.get(flash_size, None)
-    device_type = device_type_mapping.get(device_type, None)
+    flash_size = None if flash_size in (None, "", "all") else normalize_flash_size(flash_size)
+    device_type = None if device_type in (None, "", "all") else normalize_device_type(device_type)
 
     try:
         if sort == "+id":
@@ -234,7 +295,7 @@ async def get_firmware_list(*,
 async def download_file(
         firmware_id: int = Query(..., title="固件ID"),
         retrieve_password: str = Query(None, title="提取密码", example=None),
-        file_type: int = Query(..., title="文件类型,0/下载源代码 1/下载固件", glt=0, example=0),
+        file_type: int = Query(..., title="文件类型,0/下载源代码 1/下载固件", ge=0, le=1, example=0),
         db: Session = Depends(get_db)
 ):
     try:
@@ -252,10 +313,10 @@ async def download_file(
             raise UnicornException(code=5000, message="提取密码错误")
 
         if file_type == 1:
-            file_path = f"{APP_PATH}{firmware.firmware_file_path}"
+            file_path = f"{RUNTIME_PATH}{firmware.firmware_file_path}"
             file_name = os.path.basename(file_path)
         else:
-            file_path = f"{APP_PATH}{firmware.custom_source_code_file_path}"
+            file_path = f"{RUNTIME_PATH}{firmware.custom_source_code_file_path}"
             file_name = os.path.basename(file_path)
 
         # 判断文件是否存在

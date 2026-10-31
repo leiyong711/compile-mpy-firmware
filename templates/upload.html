@@ -1,226 +1,181 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Micropython自定义固件编译</title>
-    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+    <title>MicroPython 自定义固件编译</title>
     <link rel="stylesheet" href="/static/css/index.min.css">
     <style>
-        .form-select {
-            width: 350px;
-        }
-
-        .form-control {
-            width: 350px;
-        }
-
-        /* 隐藏文件选择按钮的文本 */
-        input[type="file"] {
-            color: transparent;
-            background-color: transparent;
-            border: none;
-            outline: none;
-            -webkit-box-shadow: none;
-            -moz-box-shadow: none;
-            box-shadow: none;
-            cursor: pointer;
-        }
-
-        .container {
-            margin: 0 auto;
-            margin-bottom: 100px;
-        }
-
-        .file-container {
-            height: 0px;
-            width: 350px;
-            overflow: auto;
-        }
-
-        .file-list {
-            padding-left: 20px;
-        }
-        .remark{
-            margin-top: 20px;
-        }
-        .up_but{
-            display: flex;
-            /*justify-content: center;*/
-            margin: 20px 0px 0px 60px;
-        }
-        .up_but button{
-            width: 200px;
-        }
+        body { margin: 0; background: #f5f7fa; color: #303133; font-family: Arial, "Microsoft YaHei", sans-serif; }
+        .page { width: min(920px, calc(100% - 32px)); margin: 28px auto 80px; }
+        .header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; }
+        .header h1 { font-size: 28px; margin: 0; }
+        .card { background: #fff; border-radius: 10px; padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,.07); }
+        .form-row { margin-bottom: 18px; }
+        .form-row label { display: block; font-weight: 600; margin-bottom: 8px; }
+        .full { width: 100%; }
+        .hint { color: #909399; font-size: 13px; margin-top: 7px; line-height: 1.55; }
+        .files { background: #f8f9fb; border: 1px dashed #c0c4cc; border-radius: 6px; padding: 10px 14px; margin-top: 9px; }
+        .progress-card { margin-top: 20px; border-left: 5px solid #409eff; }
+        .progress-meta { display: flex; justify-content: space-between; gap: 12px; margin: 12px 0 8px; }
+        .message { color: #606266; word-break: break-all; min-height: 22px; }
+        @media (max-width: 640px) { .header { align-items: flex-start; flex-direction: column; } .card { padding: 16px; } }
     </style>
 </head>
-
 <body>
-<div id="app" class="container">
-    <div>
-        <h1>MicroPython自定义固件编译</h1>
-    </div>
-    <template>
-        <a href="firmware.html">
-            <el-button type="success">已编译固件列表</el-button>
-        </a>
-        <a href="firmwareWaitCompiled.html">
-            <el-button type="primary">待编译列表</el-button>
-        </a>
-    </template>
-
-    <div>
-        <label for="deviceType">请选择设备类型:</label>
-        <select class="form-select" v-model="deviceType">
-            <option value="ESP8266" selected>ESP8266</option>
-            <option value="ESP32_S">ESP32 S</option>
-            <option value="ESP32_S2">ESP32 S2</option>
-            <option value="ESP32_S3">ESP32 S3</option>
-            <option value="ESP32_C3">ESP32 C3</option>
-        </select>
-    </div>
-    <div>
-        <label for="flashSize">请选择闪存大小:</label>
-        <select class="form-select" v-model="flashSize">
-            <option value="2MB" selected>2MB</option>
-            <option value="4MB">4MB</option>
-            <option value="8MB">8MB</option>
-            <option value="16MB">16MB</option>
-        </select>
-    </div>
-    <div>
-        <label for="password">上传封入固件中的文件(支持多选)：</label>
-        <div class="input-group">
-            <input type="file" id="file-input" multiple="multiple" @change="handleFileChange">
+<div id="app" class="page">
+    <div class="header">
+        <h1>MicroPython 自定义固件编译</h1>
+        <div>
+            <el-button size="small" @click="location.href='/firmware'">已编译固件</el-button>
+            <el-button size="small" type="primary" @click="location.href='/firmwareWaitCompiled'">编译队列</el-button>
         </div>
     </div>
-    <div>
-        <p id="file-count">已选择的文件: 0</p>
-        <div class="file-container">
-            <div class="file-list">
-                <p id="file_name"></p>
+
+    <div class="card">
+        <div class="form-row">
+            <label>芯片类型</label>
+            <el-select class="full" v-model="deviceType" @change="onDeviceChanged" placeholder="请选择芯片">
+                <el-option v-for="item in devices" :key="item.value" :label="item.label" :value="item.value"></el-option>
+            </el-select>
+        </div>
+
+        <div class="form-row">
+            <label>开发板 / 模组</label>
+            <el-select class="full" v-model="board" @change="onBoardChanged" filterable placeholder="请选择开发板">
+                <el-option v-for="item in boards" :key="item.value"
+                           :label="boardLabel(item)" :value="item.value"></el-option>
+            </el-select>
+            <div class="hint">列表来自服务器上的 MicroPython 源码，只有真实存在、当前环境能编译的开发板才会显示。</div>
+        </div>
+
+        <div class="form-row">
+            <label>固件变体</label>
+            <el-select class="full" v-model="boardVariant" @change="onVariantChanged" :disabled="variants.length === 0">
+                <el-option label="标准版" value=""></el-option>
+                <el-option v-for="item in variants" :key="item.value" :label="item.label" :value="item.value"></el-option>
+            </el-select>
+            <div class="hint">例如 SPIRAM、Octal-SPIRAM、OTA。普通开发板保持“标准版”即可。</div>
+        </div>
+
+        <div class="form-row">
+            <label>Flash 大小</label>
+            <el-select class="full" v-model="flashSize" :disabled="boardVariant !== ''">
+                <el-option v-for="item in flashSizes" :key="item" :label="flashLabel(item)" :value="item"></el-option>
+            </el-select>
+            <div class="hint">ESP32 推荐“自动/开发板默认”。显式选择容量时，后端会生成对应 sdkconfig 和分区表；该参数不再只是记录用途。</div>
+        </div>
+
+        <div class="form-row">
+            <label>需要封入固件的 Python 文件（可多选）</label>
+            <input type="file" multiple @change="handleFileChange">
+            <div class="files" v-if="fileList.length">
+                <div v-for="file in fileList" :key="file.name" v-text="file.name"></div>
             </div>
         </div>
+
+        <div class="form-row">
+            <label>邮箱</label>
+            <el-input v-model.trim="email" placeholder="用于区分和检索固件"></el-input>
+        </div>
+        <div class="form-row">
+            <label>提取密码（可选）</label>
+            <el-input v-model="password" show-password placeholder="下载固件时校验"></el-input>
+        </div>
+        <div class="form-row">
+            <label>备注（可选）</label>
+            <el-input type="textarea" :rows="3" v-model="remark"></el-input>
+        </div>
+        <el-button type="primary" :loading="uploading" @click="upload">创建编译任务</el-button>
     </div>
-    <div>
-        <label for="email">请输入邮箱：<span style="color: red">*</span></label>
-        <input type="email" class="form-control" v-model="email" required>
-    </div>
-    <div>
-        <label for="password">提取密码：</label>
-        <input type="password" class="form-control" v-model="password" minlength="6">
-    </div>
-    <div class="remark">
-        <label>备注：</label>
-        <textarea v-model="remark" rows="4" cols="34"></textarea>
-    </div>
-    <div class="up_but">
-        <el-button type="primary" @click="upload">上传</el-button>
+
+    <div class="card progress-card" v-if="taskId">
+        <div class="progress-meta">
+            <strong>任务 #<span v-text="taskId"></span></strong>
+            <el-tag :type="progressTag" v-text="statusText"></el-tag>
+        </div>
+        <el-progress :percentage="progress.percentage || 0" :status="progressBarStatus"></el-progress>
+        <p class="message" v-text="progress.message || '等待服务器推送进度…'"></p>
+        <p class="hint" v-if="progress.total_steps">实际编译步骤：<span v-text="progress.current_step"></span> / <span v-text="progress.total_steps"></span></p>
+        <el-button v-if="progress.status === 'success'" type="success" @click="location.href='/firmware'">前往下载固件</el-button>
     </div>
 </div>
 
 <script src="/static/js/vue.min.js"></script>
 <script src="/static/js/index.min.js"></script>
 <script>
-    new Vue({
-        el: '#app',
-        data: {
-            deviceType: 'ESP8266',
-            flashSize: '2MB',
-            email: '',
-            password: '',
-            remark: '',
-            fileCount: 0,
-            fileList: [],
-
-        },
-        methods: {
-            handleFileChange(event) {
-                const files = event.target.files;
-                this.fileCount = files.length;
-                this.fileList = Array.from(files);
-
-                document.getElementById("file-count").textContent = '已选择的文件: ' + files.length;
-                document.getElementById("file_name").innerHTML = "";
-
-                for(let i = 0; i < this.fileList.length; i++){
-                    document.getElementById("file_name").innerHTML += this.fileList[i].name + "<br>";
-                }
-
-                const fileContainer = document.querySelector('.file-container');
-                if(this.fileCount > 0) {
-                    // 根据文件列表的高度来动态设置容器的高度
-                    fileContainer.style.height = `150px`;
-                    fileContainer.style.border = `2px solid #ced4da`;
-                }else{
-                    fileContainer.style.height = `0px`;
-                    fileContainer.style.border = `0px solid white`;
-                }
-            },
-            upload() {
-                // 处理上传逻辑
-                if (this.fileList.length === 0) {
-                    this.$message({
-                        message: `请选择要上传的文件`,
-                        type: 'error'
-                    });
-                    return;
-                }
-                if (!this.email) {
-                    this.$message({
-                        message: `请输入正确的邮箱`,
-                        type: 'error'
-                    });
-                    return;
-                }
-                if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email) === false) {
-                    this.$message({
-                        message: `请输入正确的邮箱`,
-                        type: 'error'
-                    });
-                    return;
-                }
-                const formData = new FormData();
-                formData.append('device_type', this.deviceType);
-                formData.append('flash_size', this.flashSize);
-                formData.append('email', this.email);
-                formData.append('password', this.password);
-                formData.append('remark', this.remark);
-                for (let i = 0; i < this.fileList.length; i++) {
-                    formData.append('files', this.fileList[i]);
-                }
-                fetch('/api/upload', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json()) // 将响应转换为JSON格式
-                .then(data => {
-                    console.log(data);
-                    if (data.code === 2000) {
-                        this.$message({
-                            message: `${data.data.msg}`,
-                            type: 'success'
-                        });
-                    } else {
-                        this.$message({
-                            message: `文件上传失败: ${data.message}`,
-                            type: 'error'
-                        });
-                    }
-                })
-                .catch(error => {
-                    this.$message({
-                        message: `文件上传失败: ${error}`,
-                        type: 'error'
-                    });
-                });
-            },
-
-
+new Vue({
+    el: '#app',
+    data: {
+        devices: [], deviceType: '', board: '', boardVariant: '', flashSize: '',
+        fileList: [], email: '', password: '', remark: '', uploading: false,
+        taskId: null, progress: {percentage: 0, status: 'queued', message: ''}, socket: null
+    },
+    computed: {
+        currentDevice() { return this.devices.find(item => item.value === this.deviceType) || null; },
+        boards() { return this.currentDevice ? this.currentDevice.boards : []; },
+        currentBoard() { return this.boards.find(item => item.value === this.board) || null; },
+        variants() { return this.currentBoard ? this.currentBoard.variants : []; },
+        flashSizes() { return this.currentDevice ? this.currentDevice.flash_sizes : []; },
+        progressTag() { return this.progress.status === 'success' ? 'success' : this.progress.status === 'failed' ? 'danger' : 'warning'; },
+        progressBarStatus() { return this.progress.status === 'success' ? 'success' : this.progress.status === 'failed' ? 'exception' : undefined; },
+        statusText() {
+            const labels = {queued: '排队中', running: '编译中', success: '编译成功', failed: '编译失败'};
+            return labels[this.progress.status] || '处理中';
         }
-    });
+    },
+    mounted() { this.loadOptions(); },
+    beforeDestroy() { if (this.socket) this.socket.close(); },
+    methods: {
+        async loadOptions() {
+            try {
+                const response = await fetch('/api/build-options');
+                const body = await response.json();
+                this.devices = body.data.devices;
+                if (!this.devices.length) throw new Error('服务器没有发现可用的 MicroPython 开发板');
+                this.deviceType = this.devices[0].value;
+                this.onDeviceChanged();
+            } catch (error) { this.$message.error('加载编译选项失败：' + error.message); }
+        },
+        boardLabel(item) { return (item.vendor ? item.vendor + ' - ' : '') + item.label + ' (' + item.value + ')'; },
+        flashLabel(value) { return value === 'AUTO' ? '自动 / 开发板默认（推荐）' : value; },
+        onDeviceChanged() {
+            this.board = this.currentDevice ? this.currentDevice.default_board : '';
+            this.flashSize = this.currentDevice ? this.currentDevice.default_flash_size : '';
+            this.boardVariant = '';
+        },
+        onBoardChanged() { this.boardVariant = ''; },
+        onVariantChanged() { if (this.boardVariant) this.flashSize = 'AUTO'; },
+        handleFileChange(event) { this.fileList = Array.from(event.target.files || []); },
+        async upload() {
+            if (!this.fileList.length) return this.$message.error('请选择至少一个源码文件');
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email)) return this.$message.error('请输入正确的邮箱');
+            const form = new FormData();
+            form.append('device_type', this.deviceType); form.append('flash_size', this.flashSize);
+            form.append('board', this.board); form.append('board_variant', this.boardVariant);
+            form.append('email', this.email); form.append('password', this.password); form.append('remark', this.remark);
+            this.fileList.forEach(file => form.append('files', file));
+            this.uploading = true;
+            try {
+                const response = await fetch('/api/upload', {method: 'POST', body: form});
+                const body = await response.json();
+                if (!response.ok || body.code !== 2000) throw new Error(body.message || '上传失败');
+                this.taskId = body.data.id;
+                this.progress = {percentage: 0, status: 'queued', message: '任务已进入编译队列'};
+                this.$message.success(body.data.msg);
+                this.connectProgress();
+            } catch (error) { this.$message.error(error.message); }
+            finally { this.uploading = false; }
+        },
+        connectProgress() {
+            if (this.socket) this.socket.close();
+            const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            this.socket = new WebSocket(`${scheme}//${location.host}/api/ws/progress/${this.taskId}`);
+            this.socket.onmessage = event => { this.progress = JSON.parse(event.data); };
+            this.socket.onerror = () => { this.progress.message = 'WebSocket 暂时断开，可在编译队列页面继续查看'; };
+        }
+    }
+});
 </script>
 </body>
-
 </html>

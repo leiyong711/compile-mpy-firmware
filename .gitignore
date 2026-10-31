@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+firmware.db
+logs/
+res_pack/
+temp/
+build_script.sh
+.env
+docker/toolchain-context/
+

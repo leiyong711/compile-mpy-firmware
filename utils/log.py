@@ -5,9 +5,14 @@
 # creation time: 2023-11-28 17:38
 # Email: leiyong711@163.com
 
+import os
 import time
 from loguru import logger as lg
 from utils import constants
+
+
+LOG_PATH = os.path.join(constants.RUNTIME_PATH, "logs")
+os.makedirs(LOG_PATH, exist_ok=True)
 
 
 # logger.remove(handler_id=None)  # 清除之前的设置
@@ -15,7 +20,7 @@ from utils import constants
 
 
 # INFO级日志模板初始化配置
-lg.add(f"{constants.APP_PATH}/logs/info_log_{time.strftime('%Y_%m_%d')}.log",
+lg.add(f"{LOG_PATH}/info_log_{time.strftime('%Y_%m_%d')}.log",
        # filter=handler_request,
        level="INFO",
        format='{time:YYYY-MM-DD HH:mm:ss.SSS} - {level} - {file} - {function} - {line} - {message}',
@@ -28,7 +33,7 @@ lg.add(f"{constants.APP_PATH}/logs/info_log_{time.strftime('%Y_%m_%d')}.log",
        )
 
 # ERROR级日志模板初始化配置
-lg.add(f"{constants.APP_PATH}/logs/error_log_{time.strftime('%Y_%m_%d')}.log",
+lg.add(f"{LOG_PATH}/error_log_{time.strftime('%Y_%m_%d')}.log",
        level="ERROR",
        format='{time:YYYY-MM-DD HH:mm:ss.SSS} - {level} - {file} - {function} - {line} - {message}',
        rotation="00:00",  # 文件过大就会重新生成一个新文件  "12:00"# 每天12点创建新文件
@@ -40,7 +45,7 @@ lg.add(f"{constants.APP_PATH}/logs/error_log_{time.strftime('%Y_%m_%d')}.log",
        )
 
 # WARNING级日志模板初始化配置
-lg.add(f"{constants.APP_PATH}/logs/warning_log_{time.strftime('%Y_%m_%d')}.log",
+lg.add(f"{LOG_PATH}/warning_log_{time.strftime('%Y_%m_%d')}.log",
        level="WARNING",
        format='{time:YYYY-MM-DD HH:mm:ss.SSS} - {level} - {file} - {function} - {line} - {message}',
        rotation="00:00",  # 文件过大就会重新生成一个新文件  "12:00"# 每天12点创建新文件
@@ -52,7 +57,7 @@ lg.add(f"{constants.APP_PATH}/logs/warning_log_{time.strftime('%Y_%m_%d')}.log",
        )
 
 # DEBUG级日志模板初始化配置
-lg.add(f"{constants.APP_PATH}/logs/debug_log_{time.strftime('%Y_%m_%d')}.log",
+lg.add(f"{LOG_PATH}/debug_log_{time.strftime('%Y_%m_%d')}.log",
        level="DEBUG",
        format='{time:YYYY-MM-DD HH:mm:ss.SSS} - {level} - {file} - {function} - {line} - {message}',
        rotation="00:00",  # 文件过大就会重新生成一个新文件  "12:00"# 每天12点创建新文件

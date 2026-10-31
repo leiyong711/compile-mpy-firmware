@@ -1,0 +1,14 @@
+services:
+  compile-mpy-firmware:
+    image: leiyong711/compile-mpy-firmware:latest
+    platform: linux/arm64
+    container_name: compile-mpy-firmware
+    restart: unless-stopped
+    ports:
+      - "9001:9000"
+    environment:
+      TZ: Asia/Shanghai
+      BUILD_JOBS: "4"
+    volumes:
+      - ./data:/data/compile-mpy-runtime
+

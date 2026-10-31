@@ -13,3 +13,4 @@ ProjectConfig:                             # 项目配置
   esp8266_dir: /ports/esp8266  # 模型目录
   esp32_dir: /ports/esp32  # 模型目录
   build_timeout_seconds: 1800  # 编译超时时间
+  scheduler_interval_seconds: 2  # 队列检查间隔

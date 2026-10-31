@@ -1,355 +1,117 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>已编译固件列表</title>
-    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+    <title>已编译 MicroPython 固件</title>
     <link rel="stylesheet" href="/static/css/index.min.css">
     <style>
-        .form-select {
-            width: 350px;
-        }
-
-        .form-control {
-            width: 350px;
-        }
-
-        /* 隐藏文件选择按钮的文本 */
-        input[type="file"] {
-            color: transparent;
-            background-color: transparent;
-            border: none;
-            outline: none;
-            -webkit-box-shadow: none;
-            -moz-box-shadow: none;
-            box-shadow: none;
-            cursor: pointer;
-        }
-
-        .container {
-            margin: 0 auto;
-            margin-bottom: 100px;
-        }
-
-        .file-container {
-            height: 0px;
-            width: 350px;
-            overflow: auto;
-        }
-
-        .file-list {
-            padding-left: 20px;
-        }
-        .remark{
-            margin-top: 20px;
-        }
-        .up_but{
-            display: flex;
-            /*justify-content: center;*/
-            margin: 20px 0px 0px 60px;
-        }
-        .up_but button{
-            width: 200px;
-        }
+        body { margin: 0; background: #f5f7fa; font-family: Arial, "Microsoft YaHei", sans-serif; }
+        .page { width: min(1450px, calc(100% - 32px)); margin: 28px auto 80px; }
+        .header { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+        .header h1 { margin:0; font-size:28px; }
+        .card { background:#fff; border-radius:10px; padding:20px; box-shadow:0 2px 12px rgba(0,0,0,.07); }
+        .filters { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:18px; }
+        .filters .el-input, .filters .el-select { width:190px; }
+        @media (max-width:700px) { .header { align-items:flex-start; gap:12px; flex-direction:column; } }
     </style>
 </head>
-
 <body>
-<div id="app" class="container">
-    <div>
-        <h1>MicroPython已编译固件列表</h1>
+<div id="app" class="page">
+    <div class="header">
+        <h1>已编译 MicroPython 固件</h1>
+        <div>
+            <el-button size="small" type="success" @click="location.href='/upload'">新建编译任务</el-button>
+            <el-button size="small" @click="location.href='/firmwareWaitCompiled'">编译队列</el-button>
+        </div>
     </div>
-
-    <template>
-        <a href="upload.html">
-            <el-button type="success">编译新固件 + </el-button>
-        </a>
-        <a href="firmwareWaitCompiled.html">
-            <el-button type="primary">待编译列表</el-button>
-        </a>
-    </template>
-
-
-    <el-form :inline="true" :model="formInline" class="demo-form-inline">
-        <el-form-item label="邮箱">
-            <el-input v-model="formInline.email" placeholder="邮箱"></el-input>
-        </el-form-item>
-        <el-form-item label="设备类型">
-            <el-select v-model="formInline.device_type" placeholder="设备类型">
-                <el-option label="全部" value="all"></el-option>
-                <el-option label="ESP8266" value="ESP8266"></el-option>
-                <el-option label="ESP32_S" value="ESP32 S"></el-option>
-                <el-option label="ESP32_S2" value="ESP32 S2"></el-option>
-                <el-option label="ESP32_S3" value="ESP32 S3"></el-option>
-                <el-option label="ESP32_C3" value="ESP32 C3"></el-option>
+    <div class="card">
+        <div class="filters">
+            <el-input v-model.trim="filters.email" clearable placeholder="邮箱"></el-input>
+            <el-select v-model="filters.device_type">
+                <el-option label="全部芯片" value="all"></el-option>
+                <el-option v-for="item in devices" :key="item.value" :label="item.label" :value="item.value"></el-option>
             </el-select>
-        </el-form-item>
-        <el-form-item label="闪存大小">
-            <el-select v-model="formInline.flash_size" placeholder="闪存大小">
-                <el-option label="全部" value="all"></el-option>
-                <el-option label="2M" value="2M"></el-option>
-                <el-option label="4M" value="4M"></el-option>
-                <el-option label="8M" value="8M"></el-option>
-                <el-option label="16M" value="16M"></el-option>
+            <el-select v-model="filters.flash_size">
+                <el-option label="全部容量" value="all"></el-option>
+                <el-option v-for="item in allFlashSizes" :key="item" :label="item === 'AUTO' ? '自动/默认' : item" :value="item"></el-option>
             </el-select>
-        </el-form-item>
-        <el-form-item label="排序方式">
-            <el-select v-model="formInline.sort" placeholder="排序方式">
-                <el-option label="ID升序" value="+id"></el-option>
-                <el-option label="ID降序" value="-id"></el-option>
-                <!-- 你可以根据需要添加更多的选项 -->
+            <el-select v-model="filters.sort">
+                <el-option label="固件 ID 升序" value="+id"></el-option>
+                <el-option label="固件 ID 降序" value="-id"></el-option>
             </el-select>
-        </el-form-item>
-        <el-form-item>
-            <el-button type="primary" @click="onSubmit">查询</el-button>
-        </el-form-item>
-    </el-form>
-
-
-    <template>
-        <el-table
-                :data="tableData"
-                border
-                empty-text="暂无数据"
-                style="width: 100%">
-            <el-table-column
-                    prop="id"
-                    label="固件ID"
-                    width="65">
+            <el-button type="primary" @click="loadFirmware">查询</el-button>
+        </div>
+        <el-table :data="tableData" border empty-text="暂无固件" style="width:100%">
+            <el-table-column prop="id" label="ID" width="65"></el-table-column>
+            <el-table-column prop="email" label="邮箱" min-width="170"></el-table-column>
+            <el-table-column prop="device_type" label="芯片" width="115"></el-table-column>
+            <el-table-column prop="board" label="开发板" min-width="180"></el-table-column>
+            <el-table-column prop="board_variant" label="变体" width="105">
+                <template slot-scope="scope"><span v-text="scope.row.board_variant || '标准版'"></span></template>
             </el-table-column>
-            <el-table-column
-                    prop="email"
-                    label="邮箱"
-                    width="180">
+            <el-table-column prop="flash_size" label="Flash" width="90"></el-table-column>
+            <el-table-column label="编译耗时" width="100">
+                <template slot-scope="scope"><span v-text="duration(scope.row.compilation_time_consuming)"></span></template>
             </el-table-column>
-            <el-table-column
-                    prop="device_type"
-                    label="设备类型"
-                    width="120">
-            </el-table-column>
-            <el-table-column
-                    prop="flash_size"
-                    label="闪存大小"
-                    width="100">
-            </el-table-column>
-            <el-table-column
-                    prop="remark"
-                    label="备注">
-            </el-table-column>
-            <el-table-column
-                    prop="compilation_time_consuming"
-                    label="编译耗时"
-                    :formatter="formatMillisecondsToTime"
-                    width="90">
-            </el-table-column>
-            <el-table-column
-                    prop="upload_time"
-                    label="上传时间"
-                    width="180">
-            </el-table-column>
-            <el-table-column label="操作">
+            <el-table-column prop="remark" label="备注" min-width="120"></el-table-column>
+            <el-table-column prop="start_compilation_time" label="开始编译" width="165"></el-table-column>
+            <el-table-column label="下载" width="190" fixed="right">
                 <template slot-scope="scope">
-                    <el-button
-                            size="mini"
-                            type="primary"
-                            class="el-icon-download"
-                            @click="handleDownloadSourceFile(scope.$index, scope.row)">下载源代码文件</el-button>
-                    <el-button
-                            size="mini"
-                            type="success"
-                            class="el-icon-download"
-                            @click="handleDownloadBin(scope.$index, scope.row)">下载bin文件</el-button>
+                    <el-button size="mini" type="primary" @click="download(scope.row, 1)">固件</el-button>
+                    <el-button size="mini" @click="download(scope.row, 0)">源码</el-button>
                 </template>
             </el-table-column>
         </el-table>
-        <el-pagination
-                @size-change="handleSizeChange"
-                @current-change="handleCurrentChange"
-                layout="total, sizes, prev, pager, next, jumper"
-                :page-sizes="[5, 10, 20, 50, 100]"
-                :page-size="5"
-                :total="total">
-        </el-pagination>
-
-        <el-dialog title="请输入提取密码" :visible.sync="isDialogVisible">
-            <el-input v-model="passwordInput" placeholder="请输入提取密码"></el-input>
-            <span slot="footer" class="dialog-footer">
-            <el-button @click="isDialogVisible = false">取 消</el-button>
-            <el-button type="primary" @click="handlePasswordConfirm">确 定</el-button>
-        </span>
-        </el-dialog>
-    </template>
-
+        <el-pagination style="margin-top:16px" @size-change="onSize" @current-change="onPage"
+                       layout="total, sizes, prev, pager, next" :page-sizes="[5,10,20,50]"
+                       :page-size="pageSize" :current-page="currentPage" :total="total"></el-pagination>
+    </div>
 </div>
-
 <script src="/static/js/axios.min.js"></script>
 <script src="/static/js/vue.min.js"></script>
 <script src="/static/js/index.min.js"></script>
 <script>
-    new Vue({
-        el: '#app',
-        data: {
-            formInline: {
-                email: '',
-                device_type: 'all',
-                flash_size: 'all',
-                sort: '-id',
-            },
-            tableData: [],
-            isDialogVisible: false, // 是否显示密码输入框
-            passwordInput: '',    // 密码输入框的值
-            downloadType: 0,    // 下载类型
-            firmwareId: null,   // 要下载的固件的ID
-
-            total: 0,
-            pageSize: 5,
-            currentPage: 1,
-
+new Vue({
+    el:'#app',
+    data:{
+        devices:[], tableData:[], total:0, pageSize:10, currentPage:1,
+        filters:{email:'', device_type:'all', flash_size:'all', sort:'-id'}
+    },
+    computed:{
+        allFlashSizes(){ const values=new Set(); this.devices.forEach(d=>d.flash_sizes.forEach(v=>values.add(v))); return Array.from(values); }
+    },
+    async mounted(){ await this.loadOptions(); await this.loadFirmware(); },
+    methods:{
+        async loadOptions(){ try{ const r=await axios.get('/api/build-options'); this.devices=r.data.data.devices; }catch(e){ this.$message.error('加载编译选项失败：'+e); } },
+        async loadFirmware(){
+            try{
+                const r=await axios.get('/api/get_firmware_list',{params:{page:this.currentPage,limit:this.pageSize,email:this.filters.email||null,flash_size:this.filters.flash_size,device_type:this.filters.device_type,sort:this.filters.sort}});
+                this.tableData=r.data.data.items; this.total=r.data.data.total;
+            }catch(e){ this.$message.error('获取固件列表失败：'+e); }
         },
-        mounted() {
-            this.onSubmit();  // 页面加载时发送请求
+        duration(ms){ const seconds=Math.round((ms||0)/1000); return seconds<60 ? seconds+' 秒' : Math.floor(seconds/60)+'分'+(seconds%60)+'秒'; },
+        async download(row,fileType){
+            let password='';
+            if(row.retrieve_password){
+                try{ const result=await this.$prompt('请输入提取密码','下载验证',{inputType:'password',confirmButtonText:'下载',cancelButtonText:'取消'}); password=result.value; }
+                catch(e){ return; }
+            }
+            try{
+                const response=await axios.get('/api/download',{params:{firmware_id:row.id,retrieve_password:password,file_type:fileType},responseType:'arraybuffer'});
+                const disposition=response.headers['content-disposition']||'';
+                const match=disposition.match(/filename="?([^";]+)"?/i); const name=match?match[1]:(fileType===1?'firmware.bin':'source.zip');
+                const url=URL.createObjectURL(new Blob([response.data])); const link=document.createElement('a'); link.href=url; link.download=name;
+                document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+            }catch(e){
+                let message='下载失败';
+                if(e.response&&e.response.data){ try{ message=JSON.parse(new TextDecoder().decode(e.response.data)).message||message; }catch(ignore){} }
+                this.$message.error(message);
+            }
         },
-        methods: {
-            formatMillisecondsToTime(row) {
-                const ms = row.compilation_time_consuming;
-                const hours = Math.floor((ms / (1000 * 60 * 60)) % 24);
-                const minutes = Math.floor((ms / (1000 * 60)) % 60);
-                const seconds = Math.floor((ms / 1000) % 60);
-                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            },
-            // 每页显示条数改变时触发
-            handleSizeChange(val) {
-                console.log(`每页 ${val} 条`);
-                this.pageSize = val;
-                this.onSubmit();  // 当每页的记录数改变时，重新发送请求
-            },
-            // 当前页改变时触发
-            handleCurrentChange(val) {
-                console.log(`当前页: ${val}`);
-                this.currentPage = val;
-                this.onSubmit();  // 当前页码改变时，重新发送请求
-            },
-            // 下载源文件
-            handleDownloadSourceFile(index, row) {
-                console.log(index, row);
-                this.firmwareId = row.id;
-                this.downloadType = 0;
-                this.passwordInput = '';
-
-                if (row.retrieve_password){
-                    this.isDialogVisible = true;
-                }else{
-                    this.isDialogVisible = false;
-                    this.download()  // 下载
-                }
-            },
-            // 下载bin文件
-            handleDownloadBin(index, row) {
-                console.log(index, row);
-                this.firmwareId = row.id;
-                this.downloadType = 1;
-                this.passwordInput = '';
-
-                if (row.retrieve_password){
-                    this.isDialogVisible = true;
-                }else{
-                    this.isDialogVisible = false;
-                    this.download()  // 下载
-                }
-            },
-            // 确认密码
-            handlePasswordConfirm() {
-                this.isDialogVisible = false;
-                this.download(this.passwordInput)   // 下载
-            },
-            // 下载
-            download(retrieve_password=null){
-                let params = {
-                    firmware_id: this.firmwareId,  // 固件ID
-                    file_type: this.downloadType,  // 文件类型
-                };
-                if (retrieve_password) {
-                    params.retrieve_password = retrieve_password;
-                };
-
-                axios({
-                    url: '/api/download',
-                    method: 'GET',
-                    responseType: 'arraybuffer',  // 设置响应类型为blob
-                    params: params
-                })
-                    .then(response => {
-                        // 尝试将响应解析为JSON
-                        try {
-                            const json = JSON.parse(new TextDecoder("utf-8").decode(new Uint8Array(response.data)));
-                            if (json.code && json.message) {
-                                // 错误消息
-                                this.$message.error(`Error: ${json.message}`);
-                            }
-                        } catch(e) {
-                            // 如果解析失败，但响应状态码表示成功，那么就处理文件下载
-                            if (response.status >= 200 && response.status < 300) {
-                                const contentDisposition = response.headers['content-disposition'];
-                                if (contentDisposition) {
-                                    const fileNameMatch = contentDisposition.match(/filename="(.+)"/);
-                                    if (fileNameMatch && fileNameMatch.length === 2) {
-                                        const fileName = fileNameMatch[1];
-                                        const blob = new Blob([response.data]);
-                                        const url = window.URL.createObjectURL(blob);
-                                        const link = document.createElement('a');
-                                        link.href = url;
-                                        link.setAttribute('download', fileName);  // 使用从响应头中获取的文件名
-                                        document.body.appendChild(link);
-                                        link.click();
-                                    } else {
-                                        // 错误消息
-                                        // this.$message.error(`Error: 无法检索文件名`);
-                                    }
-                                } else {
-                                    // 错误消息
-                                    // this.$message.error(`Error: 无法检索文件名`);
-                                }
-                            }
-                        }
-                    })
-                    .catch(error => {
-                        this.$message({
-                            message: `下载文件错误: ${error}`,
-                            type: 'error'
-                        });
-                    });
-            },
-            // 查询
-            onSubmit() {
-                console.log('submit!', this.formInline);
-                let params = {
-                    page: this.currentPage,
-                    limit: this.pageSize,
-                    id: null, // 这里可以根据你的需求更改
-                    email: this.formInline.email,
-                    flash_size: this.formInline.flash_size,
-                    device_type: this.formInline.device_type,
-                    sort: this.formInline.sort,
-                };
-                axios.get('/api/get_firmware_list', {params: params})
-                .then(response => {
-                    console.log(response.data);
-                    this.tableData = response.data.data.items;  // 更新tableData
-                    this.total = response.data.data.total;  // 更新总记录数
-                })
-                .catch(error => {
-                    // console.error(error);
-                    this.$message({
-                        message: `获取列表错误: ${error}`,
-                        type: 'error'
-                    });
-                });
-            },
-        }
-    });
+        onSize(value){this.pageSize=value;this.loadFirmware();}, onPage(value){this.currentPage=value;this.loadFirmware();}
+    }
+});
 </script>
 </body>
-
 </html>

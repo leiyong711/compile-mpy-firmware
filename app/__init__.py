@@ -22,8 +22,16 @@ async def lifespan(app):
     scheduler = AsyncIOScheduler()
     # 指定任务的立即执行时间为当前时间
     immediate_run_time = datetime.now()
-    scheduler.add_job(func="job.compilation_tasks:compilation_tasks", id="定时编译固件",
-                      args=("定时编译固件",), trigger="interval", seconds=60, next_run_time=immediate_run_time)
+    scheduler.add_job(
+        func="job.compilation_tasks:compilation_tasks",
+        id="定时编译固件",
+        args=("定时编译固件",),
+        trigger="interval",
+        seconds=config.get_jsonpath("$.ProjectConfig.scheduler_interval_seconds", 2),
+        next_run_time=immediate_run_time,
+        max_instances=1,
+        coalesce=True,
+    )
     scheduler.start()
     lg.info("启动调度器...")
     yield

@@ -1,0 +1,14 @@
+.git
+.gitignore
+.idea
+__pycache__
+*.py[cod]
+.pytest_cache
+.venv
+venv
+firmware.db
+logs
+res_pack
+docker/toolchain-context
+docs/images/*.tmp
+

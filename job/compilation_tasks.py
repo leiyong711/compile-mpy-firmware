@@ -1,296 +1,253 @@
 # !/usr/bin/env python
 # -*- coding:utf-8 -*-
-# project name: compile-mpy-firmware
-# author: "Lei Yong" 
-# creation time: 2023-12-13 14:37
-# Email: leiyong711@163.com
+"""串行处理固件编译队列，并持续记录可通过 WebSocket 读取的精确进度。"""
 
 import os
-import re
+import shlex
 import shutil
 import traceback
-from pathlib import Path
-from sqlalchemy import desc
 from datetime import datetime
-from utils.log import lg
-from utils.tools import compress_folder, decompress_folder, find_files, find_dirs, excuting_command
-from utils.config import Config
-from utils.constants import APP_PATH
+from pathlib import Path
+
+from app.v1.firmware.build_options import validate_selection
 from app.v1.firmware.db_model import Firmware, FirmwareWaitCompiled, SessionLocal
+from job.build_progress import (
+    BuildOutputParser,
+    estimate_esp8266_steps,
+    run_streaming_command,
+    set_progress,
+)
+from utils.config import Config
+from utils.constants import RUNTIME_PATH
+from utils.log import lg
+from utils.tools import compress_folder, decompress_folder, find_dirs
+
 
 config = Config()
 
 
-# 依赖函数，用于获取数据库会话
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+def _shell_environment(device_type: str) -> str:
+    profile = "if [ -f ~/.profile ]; then . ~/.profile; fi"
+    if device_type == "ESP8266":
+        fallback = os.getenv("ESP8266_SDK_ROOT", "/opt/esp-open-sdk/xtensa-lx106-elf")
+        setup = (
+            "if declare -F get_esp8266 >/dev/null 2>&1; then get_esp8266; "
+            f"else export ESP_SDK={shlex.quote(fallback + '/xtensa-lx106-elf/sysroot/usr')}; "
+            f"export PATH={shlex.quote(fallback + '/bin')}:$PATH; fi"
+        )
+    else:
+        export_script = os.getenv("ESP_IDF_EXPORT", "/opt/esp-idf-v5.0.4/export.sh")
+        setup = (
+            "if declare -F get_idf_5_0_4 >/dev/null 2>&1; then get_idf_5_0_4; "
+            f"elif [ -f {shlex.quote(export_script)} ]; then . {shlex.quote(export_script)} >/dev/null; "
+            "else echo '找不到 ESP-IDF 环境' >&2; exit 2; fi"
+        )
+    return f"{profile}; {setup}"
+
+
+def _make_command(directory: Path, make_arguments, jobs: int, dry_run: bool = False) -> str:
+    arguments = " ".join(shlex.quote(value) for value in make_arguments)
+    dry = "-n " if dry_run else ""
+    return f"cd {shlex.quote(str(directory))}; make {dry}-j{jobs} {arguments}".rstrip()
+
+
+def _build_dir_name(board: str, variant: str) -> str:
+    return f"build-{board}" + (f"-{variant}" if variant else "")
+
+
+def _remove_build_directories(port_dir: Path) -> None:
+    for build_path in find_dirs(str(port_dir), "build*", 0):
+        try:
+            shutil.rmtree(build_path)
+        except OSError:
+            lg.exception("删除历史编译目录失败：{}", build_path)
 
 
 def compilation_tasks(text=""):
-    """编译任务"""
     lg.info(text)
-    session = next(get_db())
-    micropython_dir = ""
-    device_dir = ""
-    err_log = ""
+    session = SessionLocal()
+    task = None
+    modules_dir = None
+    modules_backup = None
+    port_dir = None
+
     try:
-        # 正在编译的数据
-        data_being_compiled = session.query(FirmwareWaitCompiled).filter(FirmwareWaitCompiled.status == 2).order_by(FirmwareWaitCompiled.update_time).all()
-
-        # 有正在编译的任务，直接返回
-        if data_being_compiled:
-            lg.debug(f"有正在编译的任务，直接结束本次任务")
+        if session.query(FirmwareWaitCompiled).filter(FirmwareWaitCompiled.status == 2).first():
+            lg.debug("已有任务正在编译，本轮结束")
             return
 
-        # 为等待编译的数据创建查询
-        waiting_query = session.query(FirmwareWaitCompiled).filter(FirmwareWaitCompiled.status == 3).order_by(FirmwareWaitCompiled.create_time)
-        # 没有待编译数据，则为编译失败的数据创建查询
-        if waiting_query.count() == 0:
-            # 为编译失败的数据创建查询
-            waiting_query = session.query(FirmwareWaitCompiled).filter(FirmwareWaitCompiled.status == 1).order_by(FirmwareWaitCompiled.update_time)
-
-        # 没有需要编译的数据，则直接返回
-        if waiting_query.count() == 0:
-            lg.debug(f"没有需要编译的数据，直接结束本次任务")
+        # 失败任务保留给用户查看，不自动无限重试；重新上传会创建新任务。
+        task = (
+            session.query(FirmwareWaitCompiled)
+            .filter(FirmwareWaitCompiled.status == 3)
+            .order_by(FirmwareWaitCompiled.create_time)
+            .first()
+        )
+        if task is None:
+            lg.debug("没有需要编译的数据，本轮结束")
             return
 
-        # 获取结果
-        first_result = waiting_query.first()
-
-        # 修改状态和更新时间
-        first_result.status = 2  # 假设2代表"编译中"# 编译状态,0:编译成功,1:编译失败,2:编译中,3:等待编译
-        first_result.update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # 更新时间为当前时间
-
-        # 提交更改
+        task.status = 2
+        task.update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         session.commit()
-        try:
-            # 开始编译时间
-            devices = first_result.device_type
+        set_progress(task.id, 1, "preparing", "正在校验编译参数")
 
-            # 获取micropython目录
-            micropython_dir = config.get_jsonpath('$.ProjectConfig.micropython_dir')
-            if not micropython_dir:
-                raise Exception("micropython目录不存在")
+        micropython_dir = Path(
+            os.getenv("MICROPYTHON_DIR")
+            or config.get_jsonpath("$.ProjectConfig.micropython_dir")
+        ).resolve()
+        if not micropython_dir.is_dir():
+            raise RuntimeError(f"MicroPython 目录不存在：{micropython_dir}")
 
-            # 备份modules
-            device_dir = ""
-            if devices == "ESP8266":
-                device_dir = config.get_jsonpath('$.ProjectConfig.esp8266_dir')
-                if not device_dir:
-                    raise Exception("esp8266目录不存在")
+        selection = validate_selection(
+            task.device_type,
+            task.flash_size,
+            task.board or "",
+            task.board_variant or "",
+            micropython_dir=micropython_dir,
+            prepare_board=True,
+        )
+        # 兼容旧数据库中的 ESP32_S、2M 等历史值。
+        task.device_type = selection.device_type
+        task.flash_size = selection.flash_size
+        task.board = selection.board
+        task.board_variant = selection.board_variant
+        session.commit()
 
-            elif devices.startswith("ESP32_"):
-                device_dir = config.get_jsonpath('$.ProjectConfig.esp32_dir')
-                if not device_dir:
-                    raise Exception("esp32目录不存在")
+        port_name = "esp8266" if selection.device_type == "ESP8266" else "esp32"
+        port_dir = micropython_dir / "ports" / port_name
+        modules_dir = port_dir / "modules"
+        modules_backup = port_dir / "modules.zip"
+        if not modules_dir.is_dir():
+            if not modules_backup.is_file():
+                raise RuntimeError(f"{modules_dir} 和备份 {modules_backup} 均不存在")
+            decompress_folder(str(modules_backup), str(modules_dir))
 
-            # 检查device_dir文件夹是否存在
-            if not os.path.exists(f"{micropython_dir}{device_dir}/modules"):
-                # 检查备份zip文件是否存在
-                if not os.path.exists(f"{micropython_dir}{device_dir}/modules.zip"):
-                    raise Exception(f"{micropython_dir}{device_dir}/modules文件夹不存在,且modules.zip文件不存在")
+        set_progress(task.id, 3, "preparing", "正在备份内置 modules")
+        compress_folder(str(modules_dir), str(modules_dir))
+        source_archive = Path(RUNTIME_PATH + task.custom_source_code_file_path)
+        if not source_archive.is_file():
+            raise RuntimeError(f"上传源码不存在：{source_archive}")
+        decompress_folder(str(source_archive), str(modules_dir))
 
-                # 解压备份文件
-                lg.debug(f"{micropython_dir}{device_dir}文件夹不存在，解压备份文件")
-                decompress_folder(f"{micropython_dir}{device_dir}/modules.zip", f"{micropython_dir}{device_dir}/modules")
+        _remove_build_directories(port_dir)
+        jobs = max(1, int(os.getenv("BUILD_JOBS", os.cpu_count() or 2)))
+        environment = _shell_environment(selection.device_type)
 
-            # 备份modules
-            lg.debug(f"备份modules")
-            compress_folder(f"{micropython_dir}{device_dir}/modules", f"{micropython_dir}{device_dir}/modules")
+        set_progress(task.id, 5, "mpy-cross", "正在准备 mpy-cross")
+        cross_command = (
+            f"{environment}; "
+            + _make_command(micropython_dir / "mpy-cross", [], jobs)
+        )
+        status, cross_output = run_streaming_command(
+            cross_command,
+            timeout_seconds=min(
+                600, int(config.get_jsonpath("$.ProjectConfig.build_timeout_seconds", 1800))
+            ),
+        )
+        if not status:
+            raise RuntimeError(f"mpy-cross 编译失败：\n{cross_output[-8000:]}")
 
-            # 解压自定义源码文件
-            lg.debug(f"解压自定义源码文件")
-            decompress_folder(f"{APP_PATH}{first_result.custom_source_code_file_path}", f"{micropython_dir}{device_dir}/modules")
+        make_arguments = selection.make_arguments
+        total_steps = 0
+        if selection.device_type == "ESP8266":
+            dry_command = f"{environment}; " + _make_command(
+                port_dir, make_arguments, jobs, dry_run=True
+            )
+            total_steps = estimate_esp8266_steps(dry_command)
 
-            # 删除历史编译的文件目录
-            matches = find_dirs(f"{micropython_dir}{device_dir}", "build*", 0)
-            for build_path in matches:
-                lg.debug(f"删除历史编译的文件目录 {build_path}")
-                try:
-                    shutil.rmtree(build_path)
-                except:
-                    ...
+        set_progress(task.id, 10, "building", "正在编译 MicroPython 固件")
+        parser = BuildOutputParser(task.id, selection.device_type, total_steps)
+        build_command = f"{environment}; " + _make_command(port_dir, make_arguments, jobs)
+        build_timeout = int(
+            config.get_jsonpath("$.ProjectConfig.build_timeout_seconds", 1800)
+        )
+        compilation_start_time = datetime.now()
+        status, build_output = run_streaming_command(
+            build_command,
+            timeout_seconds=build_timeout,
+            on_line=parser.feed,
+        )
+        if not status:
+            raise RuntimeError(f"固件编译失败：\n{build_output[-12000:]}")
 
-            if devices == "ESP8266":
-                # command = f"/bin/bash -i -c get_esp8266  && cd {micropython_dir} && make -C mpy-cross && cd ports/esp8266 && make"
-                # 定义 ESP8266 命令
-                commands = [
-                    "# 加载.profile",
-                    "if [ -f ~/.profile ]; then",
-                    "    . ~/.profile",
-                    "fi",
-                    ""
-                    "get_esp8266",
-                    f"cd {micropython_dir}",
-                    "make -C mpy-cross",
-                    "cd ports/esp8266",
-                    "make"
-                ]
+        build_dir = port_dir / _build_dir_name(
+            selection.effective_board, selection.effective_variant
+        )
+        bin_file = build_dir / "firmware.bin"
+        if not bin_file.is_file():
+            raise RuntimeError(f"编译日志成功，但未找到固件：{bin_file}")
 
-            elif devices.startswith("ESP32_"):
-                # 定义 ESP32 命令
-                commands = [
-                    "# 加载.profile",
-                    "if [ -f ~/.profile ]; then",
-                    "    . ~/.profile",
-                    "fi",
-                    ""
-                    "get_idf_5_0_4",
-                    f"cd {micropython_dir}",
-                    "make -C mpy-cross",
-                    "cd ports/esp32",
-                    # "make submodules",
-                ]
+        set_progress(task.id, 96, "packaging", "正在保存固件和源码包")
+        total_time_spent = int(
+            (datetime.now() - compilation_start_time).total_seconds() * 1000
+        )
+        after_dir = config.get_jsonpath(
+            "$.ProjectConfig.after_compilation_dir", "/res_pack/after_compilation"
+        )
+        firmware_folder = task.email.replace("@", "_at_").replace(".", "_dot_")
+        upload_name = Path(task.custom_source_code_file_path).stem
+        relative_output = f"{after_dir}/{firmware_folder}/{upload_name}"
+        output_dir = Path(RUNTIME_PATH + relative_output)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(bin_file, output_dir / bin_file.name)
+        shutil.copy2(source_archive, output_dir / source_archive.name)
 
-                if devices == "ESP32_S2":
-                    commands.append("make BOARD=ESP32_GENERIC_S2")
-                elif devices == "ESP32_S3":
-                    commands.append("make BOARD=ESP32_GENERIC_S3")
-                elif devices == "ESP32_C3":
-                    commands.append("make BOARD=ESP32_GENERIC_C3")
-                else:
-                    # commands.append("make submodules")
-                    commands.append("make")
+        firmware = Firmware(
+            email=task.email,
+            device_type=selection.device_type,
+            flash_size=selection.flash_size,
+            board=selection.board,
+            board_variant=selection.board_variant,
+            firmware_file_path=f"{relative_output}/{bin_file.name}",
+            custom_source_code_file_path=f"{relative_output}/{source_archive.name}",
+            remark=task.remark,
+            compilation_time_consuming=total_time_spent,
+            retrieve_password=task.retrieve_password,
+            upload_time=task.update_time,
+            start_compilation_time=compilation_start_time.strftime("%Y-%m-%d %H:%M:%S"),
+        )
+        session.add(firmware)
+        if source_archive.exists():
+            source_archive.unlink()
+        task_id = task.id
+        session.delete(task)
+        session.commit()
+        set_progress(task_id, 100, "completed", "编译成功，固件可以下载", status="success")
+        lg.info("任务 {} 编译成功：{}", task_id, bin_file)
 
-            lg.debug(f"开始生成编译脚本")
-            # 创建一个新的 shell 脚本文件
-            with open(f"{APP_PATH}/build_script.sh", "w") as file:
-                file.write("#!/bin/bash\n")
-                for command in commands:
-                    file.write(command + "\n")
-            command = f"sh {APP_PATH}/build_script.sh"
-
-            lg.debug(f"开始进行固件编译")
-
-            build_timeout_seconds = config.get_jsonpath("ProjectConfig.build_timeout_seconds", 1200)  # 编译超时时间
-
-            # 编译开始时间
-            compilation_start_time = datetime.now()
-
-            status, result = excuting_command(command, timeout_seconds=build_timeout_seconds)
-
-            if not status:
-                lg.error(f"编译失败，原因：{result}")
-                raise Exception(f"编译失败")
-
-            if devices == "ESP8266":
-                # 搜索目标字符串
-                if "_GENERIC/firmware.bin" not in result:
-                    lg.error(f"编译失败，原因：{result}")
-                    raise Exception(f"编译失败")
-
-                bin_file_name = re.findall(r"Create (.*?)\.bin", result)
-                if not bin_file_name:
-                    lg.error(f"编译失败，原因：编译信息中未找到bin文件")
-                    raise Exception(f"编译失败，原因：编译信息中未找到bin文件")
-
-                bin_file_name = f"{micropython_dir}{device_dir}/{bin_file_name[0]}.bin" # bin文件路径
-
-                if not os.path.exists(bin_file_name):
-                    lg.error(f"编译失败，原因：未在{bin_file_name}中找到bin文件")
-                    raise Exception(f"编译失败，原因：未在{bin_file_name}中找到bin文件")
-            elif devices.startswith("ESP32_"):
-                # 搜索目标字符串
-                if "Project build complete. To flash, run this command:" not in result:
-                    lg.error(f"编译失败，原因：{result}")
-                    raise Exception(f"编译失败")
-
-                bin_file_name = re.findall(r"esp32/(.*?)/micropython\.bin", result)
-                if not bin_file_name:
-                    lg.error(f"编译失败，原因：编译信息中未找到bin文件")
-                    raise Exception(f"编译失败，原因：编译信息中未找到bin文件")
-
-                bin_file_name = f"{micropython_dir}{device_dir}/{bin_file_name[0]}/firmware.bin" # bin文件路径
-
-            if not os.path.exists(bin_file_name):
-                lg.error(f"编译失败，原因：未在{bin_file_name}中找到bin文件")
-                raise Exception(f"编译失败，原因：未在{bin_file_name}中找到bin文件")
-
-            lg.debug(f"编译成功")
-            # 总耗时
-            total_time_spent = int((datetime.now() - compilation_start_time).total_seconds() * 1000)
-
-            # 固件文件夹名称
-            after_compilation_dir = config.get_jsonpath("ProjectConfig.after_compilation_dir", "/res_pack/after_compilation_dir") # 编译后的文件夹名称
-            firmware_folder_name = first_result.email.replace("@", "_at_").replace(".", "_dot_")    # 邮箱作为文件夹名称
-            file_name = Path(first_result.custom_source_code_file_path).stem                        # 上传的文件名
-
-            # 创建文件夹
-            compile_content_file_path = f"{after_compilation_dir}/{firmware_folder_name}/{file_name}"
-            if not os.path.exists(f"{APP_PATH}{compile_content_file_path}"):
-                os.makedirs(f"{APP_PATH}{compile_content_file_path}", exist_ok=True)
-
-            # 复制编译后的文件
-            shutil.copy(bin_file_name, f"{APP_PATH}{compile_content_file_path}")
-
-            # 复制上传的源代码压缩包
-            shutil.copy(f"{APP_PATH}{first_result.custom_source_code_file_path}", f"{APP_PATH}{compile_content_file_path}")
-
-            # 插入数据库
-            params = {
-                "email": first_result.email,                     # 邮箱
-                "device_type": first_result.device_type,         # 设备类型
-                "flash_size": first_result.flash_size,       # Flash大小
-                "firmware_file_path": f"{compile_content_file_path}/{Path(bin_file_name).name}",  # 固件文件路径
-                "custom_source_code_file_path": f"{compile_content_file_path}/{Path(first_result.custom_source_code_file_path).name}",      # 自定义源码文件路径
-                "remark": first_result.remark,               # 备注
-                "compilation_time_consuming": total_time_spent,  # 编译耗时
-                "retrieve_password": first_result.retrieve_password,  # 提取密码
-                "upload_time": first_result.update_time,  # 上传时间
-                "start_compilation_time": f"{compilation_start_time.strftime('%Y-%m-%d %H:%M:%S')}",  # 开始编译时间
-            }
-
-            new_instance = Firmware(**params)
-            session.add(new_instance)
-            session.commit()
-            session.refresh(new_instance)
-
-            # 删除编译成功的数据
-            if os.path.exists(f"{APP_PATH}{first_result.custom_source_code_file_path}"):
-                os.remove(f"{APP_PATH}{first_result.custom_source_code_file_path}")
-                lg.debug(f"编译成功，删除原来的数据")
-
-            # 删除原来的数据
-            session.delete(first_result)
-
-            # 提交更改
-            session.commit()
-        except:
-            # 修改状态和更新时间
-            first_result.status = 1
-            err_log = traceback.format_exc()
-            first_result.err_log = err_log
-            session.commit()
-            lg.error(f"定时编译失败，原因: \n{traceback.format_exc()}")
-    except:
-        # 回滚
+    except Exception:
+        error = traceback.format_exc()
         session.rollback()
-        lg.error(f"定时编译失败，原因: \n{traceback.format_exc()}")
-    finally:
-        if hasattr(session, "close"):
-            session.close()
-
-        # 恢复modules
-        if micropython_dir and device_dir:
-            lg.debug(f"恢复modules")
+        if task is not None:
             try:
-                shutil.rmtree(f"{micropython_dir}{device_dir}/modules")
-            except:
-                lg.error(f"删除modules文件夹失败,原因:\n{traceback.format_exc()}")
+                task.status = 1
+                task.err_log = error
+                task.update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                session.commit()
+                set_progress(
+                    task.id,
+                    100,
+                    "failed",
+                    error.strip().splitlines()[-1],
+                    status="failed",
+                )
+            except Exception:
+                session.rollback()
+        lg.error("定时编译失败：\n{}", error)
+    finally:
+        # 无论成功失败都恢复干净的 modules，避免不同用户源码相互污染。
+        if modules_dir and modules_backup and modules_backup.is_file():
+            try:
+                if modules_dir.exists():
+                    shutil.rmtree(modules_dir)
+                decompress_folder(str(modules_backup), str(modules_dir))
+            except Exception:
+                lg.exception("恢复 modules 失败")
+        if port_dir:
+            _remove_build_directories(port_dir)
+        session.close()
 
-            # 删除历史编译的文件目录
-            matches = find_dirs(f"{micropython_dir}{device_dir}", "build*", 0)
-            for build_path in matches:
-                lg.debug(f"删除编译的文件目录 {build_path}")
-                try:
-                    shutil.rmtree(build_path)
-                except:
-                    ...
 
-if __name__ == '__main__':
-    compilation_tasks()
-    # backup_modules()
+if __name__ == "__main__":
+    compilation_tasks("手动执行编译任务")

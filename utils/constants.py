@@ -7,11 +7,15 @@
 
 import os
 import shutil
-from utils.log import lg
 
 # 主目录
 APP_PATH = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
+)
+
+# 可写运行数据目录。Docker 中把它挂载到持久化卷，源码目录保持只读。
+RUNTIME_PATH = os.path.abspath(
+    os.path.expanduser(os.getenv("COMPILE_MPY_DATA_DIR", APP_PATH))
 )
 
 LIB_PATH = os.path.join(APP_PATH, "compile-mpy-firmware")
