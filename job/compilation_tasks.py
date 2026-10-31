@@ -30,10 +30,13 @@ def _shell_environment(device_type: str) -> str:
     profile = "if [ -f ~/.profile ]; then . ~/.profile; fi"
     if device_type == "ESP8266":
         fallback = os.getenv("ESP8266_SDK_ROOT", "/opt/esp-open-sdk/xtensa-lx106-elf")
+        idf_tools = os.getenv("IDF_TOOLS_PATH", "/root/.espressif")
+        esptool_bin = f"{idf_tools}/python_env/idf5.0_py3.9_env/bin"
         setup = (
             "if declare -F get_esp8266 >/dev/null 2>&1; then get_esp8266; "
             f"else export ESP_SDK={shlex.quote(fallback + '/xtensa-lx106-elf/sysroot/usr')}; "
-            f"export PATH={shlex.quote(fallback + '/bin')}:$PATH; fi"
+            "export CFLAGS_EXTRA=-Wno-error; "
+            f"export PATH={shlex.quote(esptool_bin)}:{shlex.quote(fallback + '/bin')}:$PATH; fi"
         )
     else:
         export_script = os.getenv("ESP_IDF_EXPORT", "/opt/esp-idf-v5.0.4/export.sh")
