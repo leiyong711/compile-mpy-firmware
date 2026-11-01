@@ -8,7 +8,8 @@ Docker Hub 仓库：`leiyong711/compile-mpy-firmware`
 | --- | --- |
 | `latest` | 当前稳定版，ARM64 |
 | `latest-arm64` | 明确指定 ARM64 架构 |
-| `v2.0.0-arm64` | 本次功能版本，固定标签 |
+| `v2.1.0-arm64` | 固件变体帮助与 OTA 双镜像包版本，固定标签 |
+| `v2.0.0-arm64` | 首次实时进度与参数校验版本，历史固定标签 |
 | `toolchain-mpy1.22.2-idf5.0.4-arm64` | 工具链基础镜像，供主镜像构建使用 |
 
 镜像包含 MicroPython v1.22.2、ESP-IDF v5.0.4、ESP32/S2/S3/C3 交叉工具链，以及 ESP8266 ARM64 SDK/sysroot。当前发布只支持 `linux/arm64`。
@@ -84,7 +85,7 @@ ws://树莓派IP:9001/api/ws/progress/任务ID
 git clone -b leo https://github.com/leiyong711/compile-mpy-firmware.git
 cd compile-mpy-firmware
 docker build \
-  -t leiyong711/compile-mpy-firmware:v2.0.0-arm64 \
+  -t leiyong711/compile-mpy-firmware:v2.1.0-arm64 \
   -t leiyong711/compile-mpy-firmware:latest-arm64 \
   -t leiyong711/compile-mpy-firmware:latest .
 ```
@@ -92,7 +93,7 @@ docker build \
 发布：
 
 ```bash
-docker push leiyong711/compile-mpy-firmware:v2.0.0-arm64
+docker push leiyong711/compile-mpy-firmware:v2.1.0-arm64
 docker push leiyong711/compile-mpy-firmware:latest-arm64
 docker push leiyong711/compile-mpy-firmware:latest
 ```
