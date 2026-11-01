@@ -32,6 +32,7 @@ class WebTemplateRegressionTest(unittest.TestCase):
         self.assertIn("/api/tasks/${row.id}/retry", template)
         self.assertIn("axios.delete(`/api/tasks/${row.id}`)", template)
         self.assertIn("编译中不可删除", template)
+        self.assertIn("编译失败，点击“错误详情”查看原因", template)
 
 
 if __name__ == "__main__":

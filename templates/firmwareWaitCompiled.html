@@ -183,8 +183,17 @@ new Vue({
             };
         },
         progressFor(row) { return this.progressById[String(row.id)] || {}; },
-        progressStatus(row) { const progress=this.progressFor(row); return progress.status === 'failed' ? 'exception' : progress.status === 'success' ? 'success' : undefined; },
-        progressMessage(row) { const progress=this.progressFor(row); return progress.message || (row.status === 3 ? '等待编译' : '正在连接进度服务…'); },
+        progressStatus(row) {
+            const progress=this.progressFor(row);
+            return progress.status === 'failed' || row.status === 1 ? 'exception'
+                : progress.status === 'success' || row.status === 0 ? 'success' : undefined;
+        },
+        progressMessage(row) {
+            const progress=this.progressFor(row);
+            if (progress.message) return progress.message;
+            if (row.status === 1) return '编译失败，点击“错误详情”查看原因';
+            return row.status === 3 ? '等待编译' : '正在连接进度服务…';
+        },
         statusText(status) { return ({0:'编译成功',1:'编译失败',2:'编译中',3:'等待编译'})[status] || '未知'; },
         tagType(status) { return ({0:'success',1:'danger',2:'warning',3:'info'})[status] || 'info'; },
         showError(row) {
