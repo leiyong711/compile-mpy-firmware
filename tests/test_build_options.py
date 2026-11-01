@@ -46,6 +46,10 @@ class BuildOptionsTest(unittest.TestCase):
         devices = {item["value"]: item for item in options["devices"]}
         self.assertEqual({"ESP8266", "ESP32", "ESP32_C6"}, set(devices))
         self.assertEqual([], devices["ESP8266"]["boards"][0]["variants"])
+        variant = devices["ESP32"]["boards"][0]["variants"][0]
+        self.assertEqual("SPIRAM", variant["value"])
+        self.assertIn("外部内存", variant["guidance"]["name"])
+        self.assertIn("标准版", variant["guidance"]["beginner_choice"])
 
     def test_normalizes_legacy_values(self):
         self.assertEqual("ESP32", normalize_device_type("ESP32_S"))

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>固件变体与 OTA 小白教程</title>
+    <link rel="stylesheet" href="/static/css/index.min.css">
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; background: #f5f7fa; color: #303133; font-family: Arial, "Microsoft YaHei", sans-serif; line-height: 1.75; }
+        .page { width: min(980px, calc(100% - 28px)); margin: 24px auto 70px; }
+        .header, .card { background: #fff; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.07); }
+        .header { padding: 22px 26px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+        .header h1 { margin: 0; font-size: 28px; }
+        .header p { margin: 6px 0 0; color: #606266; }
+        .card { margin-top: 18px; padding: 24px 28px; }
+        h2 { margin: 0 0 14px; font-size: 22px; }
+        h3 { margin: 20px 0 8px; }
+        code { background: #f2f4f7; border-radius: 4px; padding: 2px 6px; }
+        pre { overflow-x: auto; background: #20242b; color: #eef2f7; padding: 14px 16px; border-radius: 7px; line-height: 1.55; }
+        .notice { border-left: 5px solid #409eff; background: #ecf5ff; padding: 12px 15px; border-radius: 5px; }
+        .warning { border-left-color: #e6a23c; background: #fdf6ec; }
+        .danger { border-left-color: #f56c6c; background: #fef0f0; }
+        .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+        .mini-card { border: 1px solid #ebeef5; border-radius: 8px; padding: 15px; }
+        .mini-card h3 { margin-top: 0; }
+        .flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 9px; align-items: center; text-align: center; }
+        .flow div { background: #f8fbff; border: 1px solid #d9ecff; border-radius: 7px; padding: 13px 9px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #dcdfe6; padding: 9px 11px; text-align: left; vertical-align: top; }
+        th { background: #f5f7fa; }
+        li { margin: 5px 0; }
+        .muted { color: #909399; }
+        @media (max-width: 720px) {
+            .header { align-items: flex-start; flex-direction: column; }
+            .grid { grid-template-columns: 1fr; }
+            .flow { grid-template-columns: 1fr; }
+            .flow span { transform: rotate(90deg); }
+            .card { padding: 18px; }
+        }
+    </style>
+</head>
+<body>
+<main class="page">
+    <section class="header">
+        <div>
+            <h1>固件变体与 OTA 小白教程</h1>
+            <p>先看结论：不知道该选什么，就选“标准版”；变体不是越多越好。</p>
+        </div>
+        <button class="el-button el-button--primary el-button--small" onclick="location.href='/upload'">返回编译页面</button>
+    </section>
+
+    <section class="card">
+        <h2>一、先分清三种“内存”</h2>
+        <table>
+            <thead><tr><th>名称</th><th>通俗理解</th><th>断电后</th><th>主要用途</th></tr></thead>
+            <tbody>
+            <tr><td>芯片内部 RAM</td><td>书桌，速度快但空间有限</td><td>内容消失</td><td>程序运行、变量、网络缓冲</td></tr>
+            <tr><td>SPIRAM / PSRAM</td><td>外接的大书桌</td><td>内容消失</td><td>扩大可用堆，容纳图片、数组、网络数据</td></tr>
+            <tr><td>Flash</td><td>硬盘/书柜</td><td>内容保留</td><td>固件、Python 文件、配置和文件系统</td></tr>
+            </tbody>
+        </table>
+        <p class="notice"><strong>所以：</strong>选择 SPIRAM 不会把 4MB Flash 变成 8MB，也不会自动增加存储空间；它只对确实焊有 PSRAM 的硬件有意义。</p>
+    </section>
+
+    <section class="card">
+        <h2>二、每个变体到底是什么</h2>
+        <div class="grid">
+            <article class="mini-card">
+                <h3>标准版</h3>
+                <p>使用开发板默认配置。适合普通 ESP32-WROOM、没有特殊分区需求的设备，也是小白首选。</p>
+            </article>
+            <article class="mini-card">
+                <h3>SPIRAM / PSRAM</h3>
+                <p>给带 Quad-SPI PSRAM 的 ESP32 使用，常见于 WROVER 模组。启用后 MicroPython 可以把更多动态内存分配到外部 RAM。</p>
+                <p class="muted">板上没有 PSRAM时不要选。</p>
+            </article>
+            <article class="mini-card">
+                <h3>Octal-SPIRAM</h3>
+                <p>给明确配备 Octal（八线）PSRAM 的 ESP32-S3 使用。它和普通 Quad PSRAM 的硬件连接模式不同，不能凭感觉选择。</p>
+                <p class="muted">规格没有明确写 Octal PSRAM，就保持标准版。</p>
+            </article>
+            <article class="mini-card">
+                <h3>OTA</h3>
+                <p>OTA 是 Over-The-Air，即“通过网络升级固件”。该变体建立两个应用分区，让新旧固件可以轮换。</p>
+                <p class="muted">它只提供 OTA 基础结构，不等于已经有一套自动升级服务。</p>
+            </article>
+            <article class="mini-card">
+                <h3>D2WD</h3>
+                <p>专用于 ESP32-D2WD 芯片，其封装内集成 2MB Flash。它不是普通 WROOM 的“2MB 选项”。</p>
+            </article>
+            <article class="mini-card">
+                <h3>UNICORE</h3>
+                <p>让 ESP32 只使用一个 CPU 核心，面向少数单核硬件和特殊兼容场景。普通双核开发板无需选择。</p>
+            </article>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>三、OTA 的原理</h2>
+        <p>普通固件通常只有一个应用区。正在运行时如果直接覆盖它，断电或下载失败就可能无法启动。OTA 固件把 4MB Flash 主要分为：</p>
+        <table>
+            <thead><tr><th>分区</th><th>大小</th><th>作用</th></tr></thead>
+            <tbody>
+            <tr><td><code>ota_0</code></td><td>0x180000，约 1.5MiB</td><td>运行固件 A</td></tr>
+            <tr><td><code>ota_1</code></td><td>0x180000，约 1.5MiB</td><td>备用/新固件 B</td></tr>
+            <tr><td><code>otadata</code></td><td>8KiB</td><td>记录下一次从哪个应用分区启动</td></tr>
+            <tr><td><code>vfs</code></td><td>约 960KiB</td><td>保存设备上的 Python 文件和普通数据</td></tr>
+            </tbody>
+        </table>
+        <p>设备运行 A 时，把 B 写入另一个分区；写完并校验成功后，修改启动标记并重启。若新固件第一次启动失败，bootloader 可以回到旧固件。</p>
+        <div class="flow">
+            <div>设备运行<br><strong>ota_0 / 旧固件</strong></div><span>→</span>
+            <div>下载并校验<br><strong>写入 ota_1</strong></div><span>→</span>
+            <div>切换启动并重启<br><strong>确认或回滚</strong></div>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>四、在本平台如何使用 OTA</h2>
+        <ol>
+            <li>在编译页面选择 <code>ESP32 → ESP32_GENERIC → OTA</code>，Flash 保持“自动/开发板默认”。</li>
+            <li>第一次安装时，下载的 <code>firmware-ota-package.zip</code> 中有两个文件。</li>
+            <li>使用 USB/串口烧录完整的 <code>firmware.bin</code>。这是必须步骤，因为它包含 OTA 分区表和 bootloader。</li>
+            <li>以后编译同一开发板的 OTA 版，设备端升级程序应下载 <code>ota-application.bin</code>，把它写入当前运行分区的“下一个更新分区”。</li>
+            <li>设备必须先校验下载长度、SHA-256 或数字签名；校验通过后才调用 <code>set_boot()</code> 并硬重启。</li>
+            <li>新固件第一次正常完成自检后，调用 <code>Partition.mark_app_valid_cancel_rollback()</code> 确认升级成功；否则由 bootloader 回滚。</li>
+        </ol>
+        <pre><code>from esp32 import Partition
+
+running = Partition(Partition.RUNNING)
+target = running.get_next_update()  # 新应用只能写这里
+
+# 1. 通过 HTTPS 下载 ota-application.bin
+# 2. 分块写入 target，并验证长度与 SHA-256/签名
+# 3. 全部验证通过后：
+target.set_boot()
+
+# 4. 硬重启；新固件通过自检后再执行：
+Partition.mark_app_valid_cancel_rollback()</code></pre>
+        <p class="notice warning"><strong>注意：</strong>上面是流程骨架，不是完整网络升级器。不同服务器的鉴权、HTTPS 证书、断点续传、版本策略和签名方案不同，不能用几行通用代码安全替代。</p>
+        <p class="notice danger"><strong>绝对不要：</strong>把完整 <code>firmware.bin</code> 写进 ota_0/ota_1。OTA 应用分区只能写压缩包里的 <code>ota-application.bin</code>。</p>
+    </section>
+
+    <section class="card">
+        <h2>五、小白选择表</h2>
+        <table>
+            <thead><tr><th>你的情况</th><th>应该选择</th></tr></thead>
+            <tbody>
+            <tr><td>普通开发板，只想烧录并运行 MicroPython</td><td><strong>标准版</strong></td></tr>
+            <tr><td>硬件规格明确写 ESP32-WROVER / Quad PSRAM</td><td><strong>SPIRAM</strong></td></tr>
+            <tr><td>ESP32-S3 规格明确写 Octal PSRAM</td><td><strong>SPIRAM_OCT</strong></td></tr>
+            <tr><td>需要远程更新整套 MicroPython 固件，并愿意开发安全升级程序</td><td><strong>OTA</strong></td></tr>
+            <tr><td>只是想远程更新 main.py 等 Python 文件</td><td><strong>标准版</strong>即可；这是文件更新，不必改整个固件</td></tr>
+            <tr><td>不清楚芯片、PSRAM 类型或 OTA 流程</td><td><strong>标准版</strong></td></tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section class="card">
+        <h2>六、OTA 上线前检查清单</h2>
+        <ul>
+            <li>新旧固件使用相同开发板和 OTA 分区表，应用镜像小于约 1.5MiB；</li>
+            <li>只允许 HTTPS，并校验 SHA-256；正式产品还应验证数字签名；</li>
+            <li>把版本号、目标芯片、文件长度和哈希放在受信任的升级清单中；</li>
+            <li>写备用分区期间不要切换启动，供电不足时宁可保留旧版本；</li>
+            <li>新固件先完成 Wi-Fi、文件系统和核心业务自检，再确认取消回滚；</li>
+            <li>保留 USB/串口救砖方式，并先在测试板完成断电、坏包和回滚测试。</li>
+        </ul>
+        <p>官方依据：
+            <a href="https://github.com/micropython/micropython/blob/v1.22.2/ports/esp32/README.md" target="_blank" rel="noopener">MicroPython ESP32 编译说明</a>、
+            <a href="https://docs.micropython.org/en/v1.22.0/library/esp32.html#flash-partitions" target="_blank" rel="noopener">esp32.Partition 文档</a>。
+        </p>
+    </section>
+</main>
+</body>
+</html>

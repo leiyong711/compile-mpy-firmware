@@ -15,6 +15,12 @@
         .form-row label { display: block; font-weight: 600; margin-bottom: 8px; }
         .full { width: 100%; }
         .hint { color: #909399; font-size: 13px; margin-top: 7px; line-height: 1.55; }
+        .variant-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+        .variant-title label { margin-bottom: 0; }
+        .variant-help { margin-top: 10px; padding: 12px 14px; border: 1px solid #ebeef5; border-radius: 6px; background: #f8fbff; line-height: 1.65; }
+        .variant-help strong { color: #303133; }
+        .variant-help .warning { color: #e6a23c; margin-top: 5px; }
+        .variant-help .choice { color: #409eff; margin-top: 5px; }
         .files { background: #f8f9fb; border: 1px dashed #c0c4cc; border-radius: 6px; padding: 10px 14px; margin-top: 9px; }
         .progress-card { margin-top: 20px; border-left: 5px solid #409eff; }
         .progress-meta { display: flex; justify-content: space-between; gap: 12px; margin: 12px 0 8px; }
@@ -27,6 +33,7 @@
     <div class="header">
         <h1>MicroPython 自定义固件编译</h1>
         <div>
+            <el-button size="small" icon="el-icon-question" @click="openVariantHelp">参数小白教程</el-button>
             <el-button size="small" @click="location.href='/firmware'">已编译固件</el-button>
             <el-button size="small" type="primary" @click="location.href='/firmwareWaitCompiled'">编译队列</el-button>
         </div>
@@ -50,12 +57,20 @@
         </div>
 
         <div class="form-row">
-            <label>固件变体</label>
+            <div class="variant-title">
+                <label>固件变体</label>
+                <el-button type="text" icon="el-icon-question" @click="openVariantHelp">SPIRAM / OTA 是什么？</el-button>
+            </div>
             <el-select class="full" v-model="boardVariant" @change="onVariantChanged" :disabled="variants.length === 0">
                 <el-option label="标准版" value=""></el-option>
                 <el-option v-for="item in variants" :key="item.value" :label="item.label" :value="item.value"></el-option>
             </el-select>
-            <div class="hint">例如 SPIRAM、Octal-SPIRAM、OTA。普通开发板保持“标准版”即可。</div>
+            <div class="variant-help">
+                <strong v-text="variantGuidance.name"></strong>
+                <div v-text="variantGuidance.summary"></div>
+                <div class="warning"><i class="el-icon-warning-outline"></i> <span v-text="variantGuidance.warning"></span></div>
+                <div class="choice"><i class="el-icon-guide"></i> 小白怎么选：<span v-text="variantGuidance.beginner_choice"></span></div>
+            </div>
         </div>
 
         <div class="form-row">
@@ -116,6 +131,16 @@ new Vue({
         boards() { return this.currentDevice ? this.currentDevice.boards : []; },
         currentBoard() { return this.boards.find(item => item.value === this.board) || null; },
         variants() { return this.currentBoard ? this.currentBoard.variants : []; },
+        currentVariant() { return this.variants.find(item => item.value === this.boardVariant) || null; },
+        variantGuidance() {
+            if (this.currentVariant && this.currentVariant.guidance) return this.currentVariant.guidance;
+            return {
+                name: '标准版（推荐给普通用户）',
+                summary: '使用该开发板上游提供的默认硬件、内存和分区设置，适合大多数普通开发板。',
+                warning: '标准版不是“功能缩水版”；没有特殊硬件或 OTA 需求时，它通常最稳妥。',
+                beginner_choice: '不知道该选什么，就保持标准版。'
+            };
+        },
         flashSizes() { return this.currentDevice ? this.currentDevice.flash_sizes : []; },
         progressTag() { return this.progress.status === 'success' ? 'success' : this.progress.status === 'failed' ? 'danger' : 'warning'; },
         progressBarStatus() { return this.progress.status === 'success' ? 'success' : this.progress.status === 'failed' ? 'exception' : undefined; },
@@ -139,6 +164,7 @@ new Vue({
         },
         boardLabel(item) { return (item.vendor ? item.vendor + ' - ' : '') + item.label + ' (' + item.value + ')'; },
         flashLabel(value) { return value === 'AUTO' ? '自动 / 开发板默认（推荐）' : value; },
+        openVariantHelp() { window.open('/help/variants', '_blank', 'noopener'); },
         onDeviceChanged() {
             this.board = this.currentDevice ? this.currentDevice.default_board : '';
             this.flashSize = this.currentDevice ? this.currentDevice.default_flash_size : '';

@@ -52,6 +52,12 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
+@app.get("/help/variants", include_in_schema=False)
+async def variant_help(request: Request):
+    """面向初学者的固件变体、SPIRAM 和 OTA 图文说明。"""
+    return templates.TemplateResponse("variantHelp.html", {"request": request})
+
+
 @app.exception_handler(UnicornException)
 @app.exception_handler(AssertionEcception)
 @app.exception_handler(StarletteHTTPException)

@@ -75,6 +75,42 @@ ESP8266_FLASH_VARIANTS = {
 }
 
 
+# 这些说明会随 /api/build-options 返回，前端因此能解释当前源码真正提供的
+# variant，而不需要再维护一份容易过期的硬编码设备列表。
+VARIANT_GUIDANCE = {
+    "SPIRAM": {
+        "name": "SPIRAM / PSRAM（外部内存）",
+        "summary": "为带 Quad-SPI PSRAM 的 ESP32（常见于 WROVER 模组）启用外部内存支持，可扩大 MicroPython 可用堆。",
+        "warning": "它增加的是运行内存，不是 Flash。普通 WROOM/无 PSRAM 开发板不要选择。",
+        "beginner_choice": "只有开发板或模组规格明确写有 PSRAM/WROVER 时才选；不确定就用标准版。",
+    },
+    "SPIRAM_OCT": {
+        "name": "Octal-SPIRAM（八线外部内存）",
+        "summary": "让 ESP32-S3 按 Octal（八线）模式连接 PSRAM，适用于明确配备 Octal PSRAM 的 S3 模组。",
+        "warning": "Quad 与 Octal 是硬件接线/工作模式差异，选错可能导致启动失败、找不到 PSRAM 或运行不稳定。",
+        "beginner_choice": "仅在模组资料明确标注 Octal PSRAM 时选择；不确定就用标准版。",
+    },
+    "OTA": {
+        "name": "OTA（无线固件升级分区）",
+        "summary": "使用两个应用分区保存当前和待升级固件，让设备能把新固件写到备用分区后切换启动。",
+        "warning": "这里只是编译 OTA 分区布局，不会自动提供下载服务器、升级程序、签名校验或一键推送。首次仍需通过 USB/串口刷入完整固件。",
+        "beginner_choice": "只是烧录后长期运行同一版本时选标准版；确定要自行开发无线升级流程时再选 OTA。",
+    },
+    "D2WD": {
+        "name": "ESP32-D2WD 专用版",
+        "summary": "针对内部集成 2MB Flash 的 ESP32-D2WD 芯片调整编译配置。",
+        "warning": "这不是普通 ESP32-WROOM 的容量选项，只有芯片型号确实是 ESP32-D2WD 才能选择。",
+        "beginner_choice": "不确定芯片完整型号时使用标准版。",
+    },
+    "UNICORE": {
+        "name": "单核版（UNICORE）",
+        "summary": "把 ESP32 配置为只使用一个 CPU 核心，适合少数单核硬件或特殊兼容场景。",
+        "warning": "普通双核 ESP32 通常不需要，选择后不会让程序更快。",
+        "beginner_choice": "没有明确的单核需求时使用标准版。",
+    },
+}
+
+
 def get_micropython_dir() -> Path:
     configured = os.getenv("MICROPYTHON_DIR") or Config().get_jsonpath(
         "$.ProjectConfig.micropython_dir"
@@ -100,7 +136,21 @@ def _read_board(board_dir: Path) -> Optional[dict]:
         # IDF3 是历史兼容项，当前部署使用 ESP-IDF 5，不向用户提供。
         if value == "IDF3":
             continue
-        variants.append({"value": value, "label": label})
+        variants.append(
+            {
+                "value": value,
+                "label": label,
+                "guidance": VARIANT_GUIDANCE.get(
+                    value,
+                    {
+                        "name": label,
+                        "summary": "这是当前 MicroPython 开发板源码提供的专用编译变体。",
+                        "warning": "变体通常对应特定硬件或分区配置，选择前请核对开发板说明。",
+                        "beginner_choice": "不确定时使用标准版。",
+                    },
+                ),
+            }
+        )
 
     return {
         "value": board_dir.name,

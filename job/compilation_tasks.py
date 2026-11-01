@@ -6,6 +6,7 @@ import os
 import shlex
 import shutil
 import traceback
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -24,6 +25,22 @@ from utils.tools import compress_folder, decompress_folder, find_dirs
 
 
 config = Config()
+
+
+OTA_PACKAGE_README = """MicroPython OTA 固件包（请先读）
+
+1. firmware.bin
+   完整固件，包含 bootloader、分区表和应用。首次安装或分区表改变时，
+   必须通过 USB/串口按该开发板的官方烧录说明写入。
+
+2. ota-application.bin
+   仅应用镜像，供设备已经运行 OTA 版固件后写入备用 ota_0/ota_1 分区。
+   不要把 firmware.bin 整包写进 OTA 应用分区。
+
+重要说明：选择 OTA 只建立双应用分区，并不会自动完成网络下载、SHA-256/
+签名校验、断电保护、切换启动或回滚确认。完整流程和安全注意事项请打开
+Web 页面 /help/variants 查看。
+"""
 
 
 def _shell_environment(device_type: str) -> str:
@@ -64,6 +81,30 @@ def _remove_build_directories(port_dir: Path) -> None:
             shutil.rmtree(build_path)
         except OSError:
             lg.exception("删除历史编译目录失败：{}", build_path)
+
+
+def _save_firmware_artifact(
+    build_dir: Path, output_dir: Path, board_variant: str
+) -> Path:
+    """保存可下载产物；OTA 同时提供首次烧录包和后续升级应用镜像。"""
+    firmware_bin = build_dir / "firmware.bin"
+    if not firmware_bin.is_file():
+        raise RuntimeError(f"编译日志成功，但未找到固件：{firmware_bin}")
+
+    if board_variant != "OTA":
+        destination = output_dir / firmware_bin.name
+        shutil.copy2(firmware_bin, destination)
+        return destination
+
+    application_bin = build_dir / "micropython.bin"
+    if not application_bin.is_file():
+        raise RuntimeError(f"OTA 编译成功，但未找到应用镜像：{application_bin}")
+    destination = output_dir / "firmware-ota-package.zip"
+    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.write(firmware_bin, "firmware.bin")
+        archive.write(application_bin, "ota-application.bin")
+        archive.writestr("OTA流程说明.txt", OTA_PACKAGE_README)
+    return destination
 
 
 def compilation_tasks(text=""):
@@ -177,10 +218,6 @@ def compilation_tasks(text=""):
         build_dir = port_dir / _build_dir_name(
             selection.effective_board, selection.effective_variant
         )
-        bin_file = build_dir / "firmware.bin"
-        if not bin_file.is_file():
-            raise RuntimeError(f"编译日志成功，但未找到固件：{bin_file}")
-
         set_progress(task.id, 96, "packaging", "正在保存固件和源码包")
         total_time_spent = int(
             (datetime.now() - compilation_start_time).total_seconds() * 1000
@@ -193,7 +230,9 @@ def compilation_tasks(text=""):
         relative_output = f"{after_dir}/{firmware_folder}/{upload_name}"
         output_dir = Path(RUNTIME_PATH + relative_output)
         output_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(bin_file, output_dir / bin_file.name)
+        firmware_artifact = _save_firmware_artifact(
+            build_dir, output_dir, selection.board_variant
+        )
         shutil.copy2(source_archive, output_dir / source_archive.name)
 
         firmware = Firmware(
@@ -202,7 +241,7 @@ def compilation_tasks(text=""):
             flash_size=selection.flash_size,
             board=selection.board,
             board_variant=selection.board_variant,
-            firmware_file_path=f"{relative_output}/{bin_file.name}",
+            firmware_file_path=f"{relative_output}/{firmware_artifact.name}",
             custom_source_code_file_path=f"{relative_output}/{source_archive.name}",
             remark=task.remark,
             compilation_time_consuming=total_time_spent,
@@ -217,7 +256,7 @@ def compilation_tasks(text=""):
         session.delete(task)
         session.commit()
         set_progress(task_id, 100, "completed", "编译成功，固件可以下载", status="success")
-        lg.info("任务 {} 编译成功：{}", task_id, bin_file)
+        lg.info("任务 {} 编译成功：{}", task_id, firmware_artifact)
 
     except Exception:
         error = traceback.format_exc()

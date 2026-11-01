@@ -39,6 +39,7 @@ http://192.168.0.106:9001/
 - [树莓派手把手部署与验证教程](docs/树莓派手把手部署与验证教程.md)
 - [Docker 一键部署教程](docs/Docker一键部署教程.md)
 - [设备、开发板、变体与 Flash 参数说明](docs/设备与编译参数说明.md)
+- Web 小白教程：运行服务后打开 `/help/variants`，了解 SPIRAM、Octal-SPIRAM 和 OTA 完整流程
 - [实机验证报告](docs/实机验证报告.md)
 
 ## 本地开发测试

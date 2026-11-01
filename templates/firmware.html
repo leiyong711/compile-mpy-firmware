@@ -21,6 +21,7 @@
     <div class="header">
         <h1>已编译 MicroPython 固件</h1>
         <div>
+            <el-button size="small" icon="el-icon-question" @click="location.href='/help/variants'">参数小白教程</el-button>
             <el-button size="small" type="success" @click="location.href='/upload'">新建编译任务</el-button>
             <el-button size="small" @click="location.href='/firmwareWaitCompiled'">编译队列</el-button>
         </div>
@@ -58,7 +59,9 @@
             <el-table-column prop="start_compilation_time" label="开始编译" width="165"></el-table-column>
             <el-table-column label="下载" width="190" fixed="right">
                 <template slot-scope="scope">
-                    <el-button size="mini" type="primary" @click="download(scope.row, 1)">固件</el-button>
+                    <el-button size="mini" type="primary" @click="download(scope.row, 1)">
+                        <span v-text="scope.row.board_variant === 'OTA' ? 'OTA 固件包' : '固件'"></span>
+                    </el-button>
                     <el-button size="mini" @click="download(scope.row, 0)">源码</el-button>
                 </template>
             </el-table-column>
