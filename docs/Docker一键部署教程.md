@@ -15,6 +15,14 @@ Docker Hub 仓库：`leiyong711/compile-mpy-firmware`
 
 镜像包含 MicroPython v1.22.2、ESP-IDF v5.0.4、ESP32/S2/S3/C3 交叉工具链，以及 ESP8266 ARM64 SDK/sysroot。当前发布只支持 `linux/arm64`。
 
+`v2.2.0-arm64` 已于 2026-11-01 实际上传到 Docker Hub，应用镜像摘要为：
+
+```text
+sha256:1b6615817c2b70077b3b7c900cf2009defef7c25691a3ea18904ea9d480b0c0a
+```
+
+`latest` 和 `latest-arm64` 都指向该 ARM64 镜像；生产环境建议使用固定标签 `v2.2.0-arm64`，避免日后 `latest` 更新时自动切换版本。
+
 ESP8266 使用 Debian ARM64 可用的较新 GCC，编译环境会设置 `CFLAGS_EXTRA=-Wno-error` 来兼容上游旧版 lwIP 头文件中的历史警告，并把工具链内的 `esptool.py` 加入 PATH；这与实机原生环境的设置一致，不会忽略真正的编译错误。
 
 ## 方法一：Docker Compose（推荐）
