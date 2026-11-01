@@ -57,7 +57,7 @@
             <el-table-column prop="flash_size" label="Flash" width="90"></el-table-column>
             <el-table-column label="实时进度" min-width="260">
                 <template slot-scope="scope">
-                    <el-progress :percentage="scope.row.progress ? scope.row.progress.percentage : 0"
+                    <el-progress :percentage="progressFor(scope.row).percentage || 0"
                                  :status="progressStatus(scope.row)"></el-progress>
                     <div class="progress-message" :title="progressMessage(scope.row)" v-text="progressMessage(scope.row)"></div>
                 </template>
@@ -88,7 +88,8 @@ new Vue({
     data: {
         devices: [], tableData: [], total: 0, pageSize: 10, currentPage: 1,
         filters: {email: '', device_type: 'all', flash_size: 'all', sort: '+id'},
-        sockets: {}, timer: null, errorVisible: false, errorLog: ''
+        sockets: {}, reconnectTimers: {}, progressById: {}, timer: null,
+        errorVisible: false, errorLog: ''
     },
     computed: {
         allFlashSizes() {
@@ -100,7 +101,11 @@ new Vue({
         await this.loadOptions(); await this.loadTasks();
         this.timer = setInterval(this.loadTasks, 5000);
     },
-    beforeDestroy() { clearInterval(this.timer); Object.values(this.sockets).forEach(socket => socket.close()); },
+    beforeDestroy() {
+        clearInterval(this.timer);
+        Object.values(this.reconnectTimers).forEach(timer => clearTimeout(timer));
+        Object.values(this.sockets).forEach(socket => socket.close());
+    },
     methods: {
         async loadOptions() {
             try { const response = await axios.get('/api/build-options'); this.devices = response.data.data.devices; }
@@ -112,29 +117,63 @@ new Vue({
                     page: this.currentPage, limit: this.pageSize, email: this.filters.email || null,
                     flash_size: this.filters.flash_size, device_type: this.filters.device_type, sort: this.filters.sort
                 }});
-                const previous = {}; this.tableData.forEach(row => { if (row.progress) previous[row.id] = row.progress; });
-                this.tableData = response.data.data.items.map(row => Object.assign(row, {progress: previous[row.id] || null}));
-                this.total = response.data.data.total; this.syncSockets();
+                this.tableData = response.data.data.items;
+                this.total = response.data.data.total;
+                await this.refreshProgressFallback();
+                this.syncSockets();
             } catch (error) { this.$message.error('获取队列失败：' + error); }
         },
         syncSockets() {
             const activeIds = new Set(this.tableData.filter(row => row.status === 2 || row.status === 3).map(row => String(row.id)));
-            Object.keys(this.sockets).forEach(id => { if (!activeIds.has(id)) { this.sockets[id].close(); delete this.sockets[id]; } });
-            this.tableData.forEach(row => { if ((row.status === 2 || row.status === 3) && !this.sockets[row.id]) this.connect(row); });
+            Object.keys(this.sockets).forEach(id => {
+                if (!activeIds.has(id)) { this.sockets[id].close(); this.$delete(this.sockets, id); }
+            });
+            Object.keys(this.progressById).forEach(id => {
+                if (!this.tableData.some(row => String(row.id) === id)) this.$delete(this.progressById, id);
+            });
+            activeIds.forEach(id => { if (!this.sockets[id]) this.connect(id); });
         },
-        connect(row) {
+        async refreshProgressFallback() {
+            const activeRows = this.tableData.filter(row => row.status === 2 || row.status === 3);
+            await Promise.all(activeRows.map(async row => {
+                try {
+                    const response = await axios.get(`/api/progress/${row.id}`);
+                    this.$set(this.progressById, String(row.id), response.data.data);
+                } catch (ignore) {}
+            }));
+        },
+        connect(taskId) {
+            const id = String(taskId);
             const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const socket = new WebSocket(`${scheme}//${location.host}/api/ws/progress/${row.id}`);
-            this.sockets[row.id] = socket;
+            const socket = new WebSocket(`${scheme}//${location.host}/api/ws/progress/${id}`);
+            this.$set(this.sockets, id, socket);
             socket.onmessage = event => {
-                const progress = JSON.parse(event.data); this.$set(row, 'progress', progress);
-                if (progress.status === 'failed') row.status = 1;
-                if (progress.status === 'success') { row.status = 0; setTimeout(this.loadTasks, 1200); }
+                const progress = JSON.parse(event.data);
+                // Vue 2 无法自动追踪后来添加的对象键，必须用 $set。
+                // 进度按任务 ID 独立保存，5 秒刷新表格时不会再把 WebSocket
+                // 正在更新的旧 row 对象替换掉。
+                this.$set(this.progressById, id, progress);
+                const row = this.tableData.find(item => String(item.id) === id);
+                if (row && progress.status === 'failed') this.$set(row, 'status', 1);
+                if (row && progress.status === 'success') {
+                    this.$set(row, 'status', 0); setTimeout(this.loadTasks, 1200);
+                }
             };
-            socket.onclose = () => { delete this.sockets[row.id]; };
+            socket.onclose = () => {
+                this.$delete(this.sockets, id);
+                const row = this.tableData.find(item => String(item.id) === id);
+                if (row && (row.status === 2 || row.status === 3)) {
+                    clearTimeout(this.reconnectTimers[id]);
+                    this.$set(this.reconnectTimers, id, setTimeout(() => {
+                        this.$delete(this.reconnectTimers, id);
+                        if (!this.sockets[id]) this.connect(id);
+                    }, 1500));
+                }
+            };
         },
-        progressStatus(row) { return row.progress && row.progress.status === 'failed' ? 'exception' : row.progress && row.progress.status === 'success' ? 'success' : undefined; },
-        progressMessage(row) { return row.progress ? row.progress.message : (row.status === 3 ? '等待编译' : '正在连接进度服务…'); },
+        progressFor(row) { return this.progressById[String(row.id)] || {}; },
+        progressStatus(row) { const progress=this.progressFor(row); return progress.status === 'failed' ? 'exception' : progress.status === 'success' ? 'success' : undefined; },
+        progressMessage(row) { const progress=this.progressFor(row); return progress.message || (row.status === 3 ? '等待编译' : '正在连接进度服务…'); },
         statusText(status) { return ({0:'编译成功',1:'编译失败',2:'编译中',3:'等待编译'})[status] || '未知'; },
         tagType(status) { return ({0:'success',1:'danger',2:'warning',3:'info'})[status] || 'info'; },
         showError(row) { if (row.err_log) { this.errorLog = row.err_log; this.errorVisible = true; } },

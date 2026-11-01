@@ -74,6 +74,22 @@ ESP8266_FLASH_VARIANTS = {
     "2MB": "",
 }
 
+# MicroPython v1.22.2 的 ESP32_GENERIC_C3 没有在 board.json 中声明 OTA
+# variant，但 ESP32-C3/ESP-IDF 本身支持 OTA。平台为这个经过实机验证的通用板
+# 生成独立 WEB_* 板级配置，不修改上游源码板，也不向其他未验证板型虚构选项。
+PLATFORM_OTA_BOARDS = {"ESP32_GENERIC_C3"}
+
+C3_OTA_PARTITION_FILE = "partitions-4MiB-ota-c3.csv"
+C3_OTA_PARTITIONS = """# ESP32-C3 4MiB OTA partition table
+# Name,   Type, SubType, Offset,   Size,     Flags
+nvs,      data, nvs,     0x9000,   0x4000,
+otadata,  data, ota,     0xd000,   0x2000,
+phy_init, data, phy,     0xf000,   0x1000,
+ota_0,    app,  ota_0,   0x10000,  0x1a0000,
+ota_1,    app,  ota_1,   0x1b0000, 0x1a0000,
+vfs,      data, fat,     0x350000, 0x0b0000,
+"""
+
 
 # 这些说明会随 /api/build-options 返回，前端因此能解释当前源码真正提供的
 # variant，而不需要再维护一份容易过期的硬编码设备列表。
@@ -175,6 +191,22 @@ def discover_build_options(micropython_dir: Optional[Path] = None) -> dict:
                 continue
             board = _read_board(board_dir)
             if board:
+                if board["value"] in PLATFORM_OTA_BOARDS and not any(
+                    variant["value"] == "OTA" for variant in board["variants"]
+                ):
+                    guidance = dict(VARIANT_GUIDANCE["OTA"])
+                    guidance["warning"] += (
+                        " C3 平台扩展固定使用 4MiB Flash 布局，"
+                        "芯片模组必须至少有 4MiB Flash。"
+                    )
+                    board["variants"].append(
+                        {
+                            "value": "OTA",
+                            "label": "OTA（平台扩展，已验证）",
+                            "platform_extension": True,
+                            "guidance": guidance,
+                        }
+                    )
                 boards.append(board)
 
     grouped: Dict[str, List[dict]] = {}
@@ -283,9 +315,21 @@ def validate_selection(
     else:
         if board_variant and flash_size != "AUTO":
             raise ValueError("选择开发板变体时请把 Flash 大小设为“自动/开发板默认”")
-        effective_variant = board_variant
-        effective_board = board
-        if flash_size != "AUTO" and prepare_board:
+        if board_variant == "OTA":
+            # 所有 OTA 构建都使用独立 WEB_* 板目录，并显式启用 ESP-IDF
+            # bootloader 回滚。上游已有 OTA variant 的板继续使用
+            # sdkconfig.ota；平台生成的 sdkconfig.web 作为最后覆盖层。
+            platform_extension = board in PLATFORM_OTA_BOARDS
+            effective_variant = "" if platform_extension else "OTA"
+            effective_board = (
+                _prepare_ota_board(root, board, platform_extension)
+                if prepare_board
+                else board
+            )
+        else:
+            effective_variant = board_variant
+            effective_board = board
+        if not board_variant and flash_size != "AUTO" and prepare_board:
             effective_board = _prepare_flash_board(root, board, flash_size)
 
     return BuildSelection(
@@ -311,10 +355,8 @@ def _prepare_flash_board(root: Path, board: str, flash_size: str) -> str:
         shutil.rmtree(destination)
     shutil.copytree(source, destination)
 
-    sdkconfig_path = destination / "sdkconfig.board"
-    previous = sdkconfig_path.read_text(encoding="utf-8") if sdkconfig_path.exists() else ""
     size_number = flash_size.removesuffix("MB")
-    overrides = ["", "# Web 编译平台：显式 Flash 容量覆写"]
+    overrides = ["# Web 编译平台：显式 Flash 容量覆写"]
     for candidate in ("2", "4", "8", "16"):
         value = "y" if candidate == size_number else ""
         overrides.append(f"CONFIG_ESPTOOLPY_FLASHSIZE_{candidate}MB={value}")
@@ -326,5 +368,66 @@ def _prepare_flash_board(root: Path, board: str, flash_size: str) -> str:
             f'CONFIG_PARTITION_TABLE_FILENAME="partitions-{size_number}MiB.csv"',
         ]
     )
-    sdkconfig_path.write_text(previous.rstrip() + "\n" + "\n".join(overrides) + "\n", encoding="utf-8")
+    _write_web_sdkconfig(destination, overrides)
     return effective_board
+
+
+def _prepare_ota_board(root: Path, board: str, platform_extension: bool) -> str:
+    """生成隔离的 OTA 板配置，并启用新固件确认/自动回滚能力。"""
+    source = root / "ports" / "esp32" / "boards" / board
+    if not source.is_dir():
+        raise ValueError(f"找不到开发板目录：{source}")
+
+    safe_board = re.sub(r"[^A-Z0-9_]", "_", board.upper())
+    effective_board = f"WEB_{safe_board}_OTA"
+    destination = source.parent / effective_board
+    if destination.exists():
+        shutil.rmtree(destination)
+    shutil.copytree(source, destination)
+
+    overrides = [
+        "# Web 编译平台：启用 OTA 新固件确认与自动回滚",
+        "CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y",
+    ]
+    if platform_extension:
+        partition_path = root / "ports" / "esp32" / C3_OTA_PARTITION_FILE
+        partition_path.write_text(C3_OTA_PARTITIONS, encoding="utf-8")
+        overrides.extend(
+            [
+                "# Web 编译平台：ESP32-C3 4MiB OTA 双应用分区",
+                "CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y",
+                'CONFIG_ESPTOOLPY_FLASHSIZE="4MB"',
+                "CONFIG_PARTITION_TABLE_CUSTOM=y",
+                f'CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="{C3_OTA_PARTITION_FILE}"',
+                f'CONFIG_PARTITION_TABLE_FILENAME="{C3_OTA_PARTITION_FILE}"',
+                "CONFIG_COMPILER_OPTIMIZATION_SIZE=y",
+                "CONFIG_COMPILER_OPTIMIZATION_PERF=n",
+                "CONFIG_COMPILER_OPTIMIZATION_CHECKS_SILENT=y",
+            ]
+        )
+    _write_web_sdkconfig(destination, overrides)
+    return effective_board
+
+
+def _write_web_sdkconfig(destination: Path, overrides: List[str]) -> None:
+    """写独立覆盖层，并让复制后的板级 CMake 明确在最后加载它。
+
+    不能只新增 sdkconfig.board：部分上游板（例如 ESP32_GENERIC_C3）的
+    mpconfigboard.cmake 并不会自动引用这个文件。显式追加到
+    SDKCONFIG_DEFAULTS 才能保证页面参数进入最终 sdkconfig。
+    """
+    sdkconfig_path = destination / "sdkconfig.web"
+    sdkconfig_path.write_text("\n".join(overrides) + "\n", encoding="utf-8")
+
+    cmake_path = destination / "mpconfigboard.cmake"
+    if not cmake_path.is_file():
+        raise ValueError(f"找不到开发板 CMake 配置：{cmake_path}")
+    cmake = cmake_path.read_text(encoding="utf-8").rstrip()
+    cmake += (
+        "\n\n# Web 编译平台：最后加载页面选择产生的配置覆盖层\n"
+        "set(SDKCONFIG_DEFAULTS\n"
+        "    ${SDKCONFIG_DEFAULTS}\n"
+        "    ${MICROPY_BOARD_DIR}/sdkconfig.web\n"
+        ")\n"
+    )
+    cmake_path.write_text(cmake, encoding="utf-8")

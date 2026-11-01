@@ -6,11 +6,13 @@
 # Email: leiyong711@163.com
 
 import asyncio
+import hashlib
 import io
 import os
 import shutil
 import traceback
 import threading
+import zipfile
 from utils.log import lg
 from utils.config import Config
 from utils.constants import RUNTIME_PATH
@@ -34,6 +36,32 @@ from job.build_progress import get_progress, set_progress
 
 app = APIRouter()
 config = Config()
+
+
+async def _check_firmware_password(firmware, retrieve_password: str):
+    """统一校验固件下载密码。OTA 接口和普通下载使用同一规则。"""
+    if firmware.retrieve_password and not retrieve_password:
+        raise UnicornException(code=5000, message="提取密码错误")
+    if (
+        firmware.retrieve_password
+        and firmware.retrieve_password != await sign_md5(retrieve_password)
+    ):
+        raise UnicornException(code=5000, message="提取密码错误")
+
+
+def _read_ota_application(firmware):
+    """从平台生成的 OTA 固件包读取应用镜像并计算可信元数据。"""
+    if firmware.board_variant != "OTA":
+        raise UnicornException(code=4000, message="该记录不是 OTA 固件")
+    package_path = f"{RUNTIME_PATH}{firmware.firmware_file_path}"
+    if not os.path.isfile(package_path):
+        raise UnicornException(code=5000, message="OTA 固件包不存在")
+    try:
+        with zipfile.ZipFile(package_path) as package:
+            application = package.read("ota-application.bin")
+    except (KeyError, zipfile.BadZipFile):
+        raise UnicornException(code=5000, message="OTA 固件包损坏或缺少应用镜像")
+    return application, hashlib.sha256(application).hexdigest()
 
 
 # 依赖函数，用于获取数据库会话
@@ -304,13 +332,7 @@ async def download_file(
         if firmware is None:
             raise UnicornException(code=404, message="固件不存在")
 
-        # 有密码，但是没有输入密码
-        if firmware.retrieve_password and not retrieve_password:
-            raise UnicornException(code=5000, message="提取密码错误")
-
-        # 有密码，但是输入密码错误
-        if firmware.retrieve_password and firmware.retrieve_password != await sign_md5(retrieve_password):
-            raise UnicornException(code=5000, message="提取密码错误")
+        await _check_firmware_password(firmware, retrieve_password)
 
         if file_type == 1:
             file_path = f"{RUNTIME_PATH}{firmware.firmware_file_path}"
@@ -327,4 +349,53 @@ async def download_file(
     finally:
         if hasattr(db, "close"):
             db.close()
+
+
+@app.get("/ota/{firmware_id}/manifest", summary="获取 OTA 应用镜像元数据")
+async def get_ota_manifest(
+        firmware_id: int,
+        retrieve_password: str = Query(None, title="提取密码"),
+        db: Session = Depends(get_db)):
+    """返回设备端更新前必须核对的大小和 SHA-256。"""
+    firmware = db.query(Firmware).filter(Firmware.id == firmware_id).first()
+    if firmware is None:
+        raise UnicornException(code=404, message="固件不存在")
+    await _check_firmware_password(firmware, retrieve_password)
+    application, sha256 = _read_ota_application(firmware)
+    return {
+        "code": 2000,
+        "status": True,
+        "message": "success",
+        "data": {
+            "firmware_id": firmware.id,
+            "device_type": firmware.device_type,
+            "board": firmware.board,
+            "board_variant": firmware.board_variant,
+            "size": len(application),
+            "sha256": sha256,
+            "download_path": f"/api/ota/{firmware.id}/application.bin",
+        },
+    }
+
+
+@app.get("/ota/{firmware_id}/application.bin", summary="下载 OTA 应用镜像")
+async def download_ota_application(
+        firmware_id: int,
+        retrieve_password: str = Query(None, title="提取密码"),
+        db: Session = Depends(get_db)):
+    """供设备流式下载；只返回 ota-application.bin，不返回完整烧录镜像。"""
+    firmware = db.query(Firmware).filter(Firmware.id == firmware_id).first()
+    if firmware is None:
+        raise UnicornException(code=404, message="固件不存在")
+    await _check_firmware_password(firmware, retrieve_password)
+    application, sha256 = _read_ota_application(firmware)
+    return Response(
+        content=application,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": 'attachment; filename="ota-application.bin"',
+            "X-OTA-SHA256": sha256,
+            "Cache-Control": "no-store",
+        },
+    )
 

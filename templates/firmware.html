@@ -57,12 +57,13 @@
             </el-table-column>
             <el-table-column prop="remark" label="备注" min-width="120"></el-table-column>
             <el-table-column prop="start_compilation_time" label="开始编译" width="165"></el-table-column>
-            <el-table-column label="下载" width="190" fixed="right">
+            <el-table-column label="下载 / OTA" width="285" fixed="right">
                 <template slot-scope="scope">
                     <el-button size="mini" type="primary" @click="download(scope.row, 1)">
                         <span v-text="scope.row.board_variant === 'OTA' ? 'OTA 固件包' : '固件'"></span>
                     </el-button>
                     <el-button size="mini" @click="download(scope.row, 0)">源码</el-button>
+                    <el-button v-if="scope.row.board_variant === 'OTA'" size="mini" type="success" @click="showOtaInfo(scope.row)">OTA 信息</el-button>
                 </template>
             </el-table-column>
         </el-table>
@@ -70,6 +71,21 @@
                        layout="total, sizes, prev, pager, next" :page-sizes="[5,10,20,50]"
                        :page-size="pageSize" :current-page="currentPage" :total="total"></el-pagination>
     </div>
+
+    <el-dialog title="OTA 应用镜像信息" :visible.sync="otaVisible" width="min(760px, 92%)">
+        <el-alert type="warning" :closable="false" show-icon
+                  title="这里只能写入备用 OTA 应用分区；首次串口烧录仍使用固件包里的 firmware.bin。"></el-alert>
+        <p><strong>设备：</strong><span v-text="otaInfo.device_type + ' / ' + otaInfo.board"></span></p>
+        <p><strong>文件大小：</strong><span v-text="otaInfo.size"></span> 字节</p>
+        <p><strong>SHA-256：</strong></p>
+        <el-input readonly :value="otaInfo.sha256"></el-input>
+        <p><strong>设备端下载 URL：</strong></p>
+        <el-input readonly :value="otaInfo.download_url"></el-input>
+        <div slot="footer">
+            <el-button @click="location.href='/help/variants'">查看完整 OTA 代码教程</el-button>
+            <el-button type="primary" @click="downloadOtaApplication">下载 ota-application.bin</el-button>
+        </div>
+    </el-dialog>
 </div>
 <script src="/static/js/axios.min.js"></script>
 <script src="/static/js/vue.min.js"></script>
@@ -79,6 +95,7 @@ new Vue({
     el:'#app',
     data:{
         devices:[], tableData:[], total:0, pageSize:10, currentPage:1,
+        otaVisible:false, otaInfo:{device_type:'',board:'',size:0,sha256:'',download_url:''},
         filters:{email:'', device_type:'all', flash_size:'all', sort:'-id'}
     },
     computed:{
@@ -112,6 +129,21 @@ new Vue({
                 this.$message.error(message);
             }
         },
+        async showOtaInfo(row){
+            let password='';
+            if(row.retrieve_password){
+                try{ const result=await this.$prompt('请输入提取密码以读取 OTA 信息','OTA 验证',{inputType:'password',confirmButtonText:'确定',cancelButtonText:'取消'}); password=result.value; }
+                catch(e){ return; }
+            }
+            try{
+                const response=await axios.get(`/api/ota/${row.id}/manifest`,{params:{retrieve_password:password||null}});
+                const info=response.data.data;
+                const query=password ? `?retrieve_password=${encodeURIComponent(password)}` : '';
+                this.otaInfo=Object.assign({},info,{download_url:location.origin+info.download_path+query});
+                this.otaVisible=true;
+            }catch(e){ this.$message.error((e.response&&e.response.data&&e.response.data.message)||'获取 OTA 信息失败'); }
+        },
+        downloadOtaApplication(){ if(this.otaInfo.download_url) location.href=this.otaInfo.download_url; },
         onSize(value){this.pageSize=value;this.loadFirmware();}, onPage(value){this.currentPage=value;this.loadFirmware();}
     }
 });

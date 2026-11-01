@@ -3,6 +3,7 @@
 """串行处理固件编译队列，并持续记录可通过 WebSocket 读取的精确进度。"""
 
 import os
+import re
 import shlex
 import shutil
 import traceback
@@ -84,7 +85,10 @@ def _remove_build_directories(port_dir: Path) -> None:
 
 
 def _save_firmware_artifact(
-    build_dir: Path, output_dir: Path, board_variant: str
+    build_dir: Path,
+    output_dir: Path,
+    board_variant: str,
+    ota_partition_size: int = None,
 ) -> Path:
     """保存可下载产物；OTA 同时提供首次烧录包和后续升级应用镜像。"""
     firmware_bin = build_dir / "firmware.bin"
@@ -99,12 +103,82 @@ def _save_firmware_artifact(
     application_bin = build_dir / "micropython.bin"
     if not application_bin.is_file():
         raise RuntimeError(f"OTA 编译成功，但未找到应用镜像：{application_bin}")
+    if ota_partition_size is None:
+        raise RuntimeError("无法确定 OTA 应用分区容量，拒绝生成不可验证的升级包")
+    application_size = application_bin.stat().st_size
+    if application_size > ota_partition_size:
+        raise RuntimeError(
+            "OTA 应用镜像超出分区容量："
+            f"镜像 {application_size} 字节，分区 {ota_partition_size} 字节"
+        )
     destination = output_dir / "firmware-ota-package.zip"
     with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.write(firmware_bin, "firmware.bin")
         archive.write(application_bin, "ota-application.bin")
         archive.writestr("OTA流程说明.txt", OTA_PACKAGE_README)
     return destination
+
+
+def _partition_size(value: str) -> int:
+    """解析 ESP-IDF 分区表中的十六进制、十进制和 K/M 大小。"""
+    text = value.strip().upper()
+    multiplier = 1
+    if text.endswith("K"):
+        multiplier, text = 1024, text[:-1]
+    elif text.endswith("M"):
+        multiplier, text = 1024 * 1024, text[:-1]
+    return int(text, 0) * multiplier
+
+
+def _ota_partition_capacity(port_dir: Path, selection) -> int:
+    """从本次实际板级 sdkconfig 与 CSV 读取 ota_0/ota_1 的最小容量。"""
+    board_dir = port_dir / "boards" / selection.effective_board
+    native_config_name = (
+        f"sdkconfig.{selection.effective_variant.lower()}"
+        if selection.effective_variant
+        else "sdkconfig.board"
+    )
+    config_paths = [board_dir / "sdkconfig.web", board_dir / native_config_name]
+    match = None
+    matched_config = None
+    for config_path in config_paths:
+        if not config_path.is_file():
+            continue
+        candidate = re.search(
+            r'^CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="([^"]+)"$',
+            config_path.read_text(encoding="utf-8"),
+            re.MULTILINE,
+        )
+        if candidate:
+            match = candidate
+            matched_config = config_path
+            break
+    if not match:
+        raise RuntimeError(
+            "OTA 配置没有指定自定义分区表："
+            + ", ".join(str(path) for path in config_paths)
+        )
+    partition_path = port_dir / match.group(1)
+    if not partition_path.is_file():
+        raise RuntimeError(
+            f"找不到 OTA 分区表：{partition_path}（来自 {matched_config}）"
+        )
+
+    capacities = []
+    for raw_line in partition_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        columns = [column.strip() for column in line.split(",")]
+        if (
+            len(columns) >= 5
+            and columns[1] == "app"
+            and columns[2] in ("ota_0", "ota_1")
+        ):
+            capacities.append(_partition_size(columns[4]))
+    if len(capacities) != 2:
+        raise RuntimeError(f"分区表必须同时包含 ota_0 和 ota_1：{partition_path}")
+    return min(capacities)
 
 
 def compilation_tasks(text=""):
@@ -230,8 +304,16 @@ def compilation_tasks(text=""):
         relative_output = f"{after_dir}/{firmware_folder}/{upload_name}"
         output_dir = Path(RUNTIME_PATH + relative_output)
         output_dir.mkdir(parents=True, exist_ok=True)
+        ota_partition_size = (
+            _ota_partition_capacity(port_dir, selection)
+            if selection.board_variant == "OTA"
+            else None
+        )
         firmware_artifact = _save_firmware_artifact(
-            build_dir, output_dir, selection.board_variant
+            build_dir,
+            output_dir,
+            selection.board_variant,
+            ota_partition_size=ota_partition_size,
         )
         shutil.copy2(source_archive, output_dir / source_archive.name)
 

@@ -19,6 +19,7 @@ import logging
 import uvicorn
 import asyncio
 import threading
+from pathlib import Path
 from starlette.requests import Request
 from app import create_app
 from utils.log import lg
@@ -55,7 +56,14 @@ templates = Jinja2Templates(directory="templates")
 @app.get("/help/variants", include_in_schema=False)
 async def variant_help(request: Request):
     """面向初学者的固件变体、SPIRAM 和 OTA 图文说明。"""
-    return templates.TemplateResponse("variantHelp.html", {"request": request})
+    examples_dir = Path(__file__).resolve().parent / "static" / "examples"
+    context = {
+        "request": request,
+        "ota_updater_code": (examples_dir / "ota_updater.py").read_text(encoding="utf-8"),
+        "ota_boot_code": (examples_dir / "ota_boot.py").read_text(encoding="utf-8"),
+        "ota_main_code": (examples_dir / "ota_main.py").read_text(encoding="utf-8"),
+    }
+    return templates.TemplateResponse("variantHelp.html", context)
 
 
 @app.exception_handler(UnicornException)
@@ -120,7 +128,7 @@ async def add_process_time_header(request: Request, call_next):
     response = await call_next(request)
     process_time = time.time() - start_time
     response.headers["X-Process-Time"] = str(process_time)
-    inner_ip = re.compile('(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)')
+    inner_ip = re.compile(r'(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)')
     question = inner_ip.sub(request.client.host, str(request.url))
     if not request.headers.get("X-Real-IP"):
         lg.info(f'用户IP: {request.headers.get("host")}\t路径: {question}\t{round(process_time,4)} s')

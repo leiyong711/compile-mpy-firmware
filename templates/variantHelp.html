@@ -18,6 +18,12 @@
         h3 { margin: 20px 0 8px; }
         code { background: #f2f4f7; border-radius: 4px; padding: 2px 6px; }
         pre { overflow-x: auto; background: #20242b; color: #eef2f7; padding: 14px 16px; border-radius: 7px; line-height: 1.55; }
+        pre code { display: block; background: transparent; color: inherit; padding: 0; border-radius: 0; white-space: pre; font-family: Consolas, "Courier New", monospace; }
+        details { margin-top: 12px; border: 1px solid #dcdfe6; border-radius: 7px; overflow: hidden; }
+        summary { cursor: pointer; padding: 11px 14px; background: #f5f7fa; font-weight: 700; }
+        details pre { margin: 0; border-radius: 0; max-height: 620px; }
+        .downloads { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+        .download { display: inline-block; color: #fff; background: #409eff; text-decoration: none; border-radius: 5px; padding: 8px 13px; }
         .notice { border-left: 5px solid #409eff; background: #ecf5ff; padding: 12px 15px; border-radius: 5px; }
         .warning { border-left-color: #e6a23c; background: #fdf6ec; }
         .danger { border-left-color: #f56c6c; background: #fef0f0; }
@@ -102,13 +108,14 @@
         <table>
             <thead><tr><th>分区</th><th>大小</th><th>作用</th></tr></thead>
             <tbody>
-            <tr><td><code>ota_0</code></td><td>0x180000，约 1.5MiB</td><td>运行固件 A</td></tr>
-            <tr><td><code>ota_1</code></td><td>0x180000，约 1.5MiB</td><td>备用/新固件 B</td></tr>
+            <tr><td><code>ota_0</code></td><td>普通 ESP32：0x180000；C3 扩展：0x1A0000</td><td>运行固件 A</td></tr>
+            <tr><td><code>ota_1</code></td><td>普通 ESP32：0x180000；C3 扩展：0x1A0000</td><td>备用/新固件 B</td></tr>
             <tr><td><code>otadata</code></td><td>8KiB</td><td>记录下一次从哪个应用分区启动</td></tr>
-            <tr><td><code>vfs</code></td><td>约 960KiB</td><td>保存设备上的 Python 文件和普通数据</td></tr>
+            <tr><td><code>vfs</code></td><td>普通 ESP32：约 960KiB；C3 扩展：约 704KiB</td><td>保存设备上的 Python 文件和普通数据</td></tr>
             </tbody>
         </table>
         <p>设备运行 A 时，把 B 写入另一个分区；写完并校验成功后，修改启动标记并重启。若新固件第一次启动失败，bootloader 可以回到旧固件。</p>
+        <p class="notice">本平台对普通 ESP32 OTA 和 C3 OTA 都显式启用 <code>CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y</code>。因此“新固件自检后确认、确认前异常则自动回滚”不是纸面流程，而是实际进入编译配置。</p>
         <div class="flow">
             <div>设备运行<br><strong>ota_0 / 旧固件</strong></div><span>→</span>
             <div>下载并校验<br><strong>写入 ota_1</strong></div><span>→</span>
@@ -116,29 +123,64 @@
         </div>
     </section>
 
-    <section class="card">
+    <section class="card" id="ota-guide">
         <h2>四、在本平台如何使用 OTA</h2>
+        <h3>第 1 步：编译并首次串口烧录</h3>
         <ol>
-            <li>在编译页面选择 <code>ESP32 → ESP32_GENERIC → OTA</code>，Flash 保持“自动/开发板默认”。</li>
+            <li>普通 ESP32 选择 <code>ESP32 → ESP32_GENERIC → OTA</code>；C3 选择 <code>ESP32-C3 → ESP32_GENERIC_C3 → OTA（平台扩展，已验证）</code>。</li>
+            <li>Flash 保持“自动/开发板默认”，上传你的 Python 文件并创建编译任务。</li>
             <li>第一次安装时，下载的 <code>firmware-ota-package.zip</code> 中有两个文件。</li>
-            <li>使用 USB/串口烧录完整的 <code>firmware.bin</code>。这是必须步骤，因为它包含 OTA 分区表和 bootloader。</li>
-            <li>以后编译同一开发板的 OTA 版，设备端升级程序应下载 <code>ota-application.bin</code>，把它写入当前运行分区的“下一个更新分区”。</li>
-            <li>设备必须先校验下载长度、SHA-256 或数字签名；校验通过后才调用 <code>set_boot()</code> 并硬重启。</li>
-            <li>新固件第一次正常完成自检后，调用 <code>Partition.mark_app_valid_cancel_rollback()</code> 确认升级成功；否则由 bootloader 回滚。</li>
+            <li>使用 USB/串口烧录完整的 <code>firmware.bin</code>。这是必须步骤，因为它包含 bootloader 和 OTA 分区表。</li>
         </ol>
-        <pre><code>from esp32 import Partition
 
-running = Partition(Partition.RUNNING)
-target = running.get_next_update()  # 新应用只能写这里
+        <p>Windows 示例（把 <code>COM3</code> 换成设备端口）：</p>
+        <pre><code># 普通 ESP32：完整固件从 0x1000 写入
+python -m esptool --chip esp32 --port COM3 erase_flash
+python -m esptool --chip esp32 --port COM3 --baud 460800 write_flash -z 0x1000 firmware.bin
 
-# 1. 通过 HTTPS 下载 ota-application.bin
-# 2. 分块写入 target，并验证长度与 SHA-256/签名
-# 3. 全部验证通过后：
-target.set_boot()
+# ESP32-C3：完整固件从 0x0 写入
+python -m esptool --chip esp32c3 --port COM3 erase_flash
+python -m esptool --chip esp32c3 --port COM3 --baud 460800 write_flash -z 0x0 firmware.bin</code></pre>
 
-# 4. 硬重启；新固件通过自检后再执行：
-Partition.mark_app_valid_cancel_rollback()</code></pre>
-        <p class="notice warning"><strong>注意：</strong>上面是流程骨架，不是完整网络升级器。不同服务器的鉴权、HTTPS 证书、断点续传、版本策略和签名方案不同，不能用几行通用代码安全替代。</p>
+        <h3>第 2 步：下载完整示例代码</h3>
+        <p>三个文件均带详细中文注释。下载后把 <code>ota_main.py</code> 改名为设备上的 <code>main.py</code>。</p>
+        <div class="downloads">
+            <a class="download" href="/static/examples/ota_updater.py" download>下载 ota_updater.py</a>
+            <a class="download" href="/static/examples/ota_boot.py" download>下载 ota_boot.py</a>
+            <a class="download" href="/static/examples/ota_main.py" download>下载 ota_main.py</a>
+        </div>
+
+        <h3>第 3 步：取得更新地址、大小和 SHA-256</h3>
+        <p>假设已编译固件 ID 是 <code>4</code>，浏览器打开：</p>
+        <pre><code>http://树莓派IP:9001/api/ota/4/manifest</code></pre>
+        <p>把返回的 <code>download_path</code>、<code>size</code>、<code>sha256</code> 填入 <code>ota_main.py</code>。应用镜像直接下载地址格式为：</p>
+        <pre><code>http://树莓派IP:9001/api/ota/4/application.bin</code></pre>
+
+        <h3>第 4 步：先测试业务，再触发升级</h3>
+        <ol>
+            <li>填写 Wi-Fi、更新 URL、SHA-256 和文件大小；先保持 <code>START_UPDATE=False</code>。</li>
+            <li>上传三个 Python 文件，确认设备能正常联网和运行。</li>
+            <li>准备升级时把 <code>START_UPDATE=True</code>，运行一次；代码会流式写入未运行的 OTA 分区。</li>
+            <li>只有长度和 SHA-256 都正确才会调用 <code>set_boot()</code> 并硬重启。</li>
+            <li>新固件完成 Wi-Fi 和业务自检后调用 <code>confirm_ota()</code>；失败则切回旧分区。</li>
+            <li>新固件中的 <code>START_UPDATE</code> 应恢复为 <code>False</code>，避免每次启动重复更新。</li>
+        </ol>
+
+        <h3>完整代码（可直接展开查看）</h3>
+        <details id="ota-code" open>
+            <summary>ota_updater.py：流式下载、分区写入、长度与 SHA-256 校验</summary>
+            <pre><code>{{ ota_updater_code }}</code></pre>
+        </details>
+        <details>
+            <summary>ota_boot.py：新固件确认与主动回滚</summary>
+            <pre><code>{{ ota_boot_code }}</code></pre>
+        </details>
+        <details>
+            <summary>ota_main.py：Wi-Fi、自检和触发升级的完整示例</summary>
+            <pre><code>{{ ota_main_code }}</code></pre>
+        </details>
+
+        <p class="notice warning"><strong>安全边界：</strong>示例会校验可信 SHA-256，并且写完前不会切换启动分区。正式公网产品还应增加设备身份认证、证书固定或数字签名；不要把密码直接放在公开 URL 中。</p>
         <p class="notice danger"><strong>绝对不要：</strong>把完整 <code>firmware.bin</code> 写进 ota_0/ota_1。OTA 应用分区只能写压缩包里的 <code>ota-application.bin</code>。</p>
     </section>
 
@@ -151,6 +193,7 @@ Partition.mark_app_valid_cancel_rollback()</code></pre>
             <tr><td>硬件规格明确写 ESP32-WROVER / Quad PSRAM</td><td><strong>SPIRAM</strong></td></tr>
             <tr><td>ESP32-S3 规格明确写 Octal PSRAM</td><td><strong>SPIRAM_OCT</strong></td></tr>
             <tr><td>需要远程更新整套 MicroPython 固件，并愿意开发安全升级程序</td><td><strong>OTA</strong></td></tr>
+            <tr><td>ESP32-C3 需要整固件 OTA</td><td><strong>ESP32_GENERIC_C3 → OTA（平台扩展，已验证）</strong></td></tr>
             <tr><td>只是想远程更新 main.py 等 Python 文件</td><td><strong>标准版</strong>即可；这是文件更新，不必改整个固件</td></tr>
             <tr><td>不清楚芯片、PSRAM 类型或 OTA 流程</td><td><strong>标准版</strong></td></tr>
             </tbody>
@@ -160,7 +203,7 @@ Partition.mark_app_valid_cancel_rollback()</code></pre>
     <section class="card">
         <h2>六、OTA 上线前检查清单</h2>
         <ul>
-            <li>新旧固件使用相同开发板和 OTA 分区表，应用镜像小于约 1.5MiB；</li>
+            <li>新旧固件使用相同开发板和 OTA 分区表，应用镜像不得超过 manifest/分区表容量；</li>
             <li>只允许 HTTPS，并校验 SHA-256；正式产品还应验证数字签名；</li>
             <li>把版本号、目标芯片、文件长度和哈希放在受信任的升级清单中；</li>
             <li>写备用分区期间不要切换启动，供电不足时宁可保留旧版本；</li>
