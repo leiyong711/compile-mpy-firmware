@@ -23,6 +23,16 @@ class WebTemplateRegressionTest(unittest.TestCase):
         self.assertIn("background: transparent", template)
         self.assertIn("{{ ota_updater_code }}", template)
 
+    def test_queue_has_retry_and_delete_actions(self):
+        template = (ROOT / "templates" / "firmwareWaitCompiled.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("retryTask(scope.row)", template)
+        self.assertIn("deleteTask(scope.row)", template)
+        self.assertIn("/api/tasks/${row.id}/retry", template)
+        self.assertIn("axios.delete(`/api/tasks/${row.id}`)", template)
+        self.assertIn("编译中不可删除", template)
+
 
 if __name__ == "__main__":
     unittest.main()

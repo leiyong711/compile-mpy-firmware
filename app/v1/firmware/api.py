@@ -6,6 +6,7 @@
 # Email: leiyong711@163.com
 
 import asyncio
+import datetime
 import hashlib
 import io
 import os
@@ -13,6 +14,7 @@ import shutil
 import traceback
 import threading
 import zipfile
+from pathlib import Path
 from utils.log import lg
 from utils.config import Config
 from utils.constants import RUNTIME_PATH
@@ -25,7 +27,7 @@ from .build_options import (
     normalize_flash_size,
     validate_selection,
 )
-from .db_model import Firmware, FirmwareWaitCompiled, text
+from .db_model import Firmware, FirmwareBuildProgress, FirmwareWaitCompiled, text
 from .api_model import CreateCompilationTaskOUT, GetFirmwareListOut, GetFirmwareWaitCompiledListOut
 from dbs.sqlite_connect import SessionLocal, Session
 from fastapi import APIRouter, Request, File, UploadFile, Form, Depends, Query, WebSocket, WebSocketDisconnect
@@ -83,6 +85,83 @@ async def get_build_progress(task_id: int):
     if progress is None:
         raise UnicornException(code=404, message="编译任务不存在")
     return {"code": 2000, "status": True, "message": "success", "data": progress}
+
+
+def _task_source_archive(task: FirmwareWaitCompiled) -> Path:
+    """解析任务源码包，并限定它必须位于上传目录内。"""
+    runtime_root = Path(RUNTIME_PATH).resolve()
+    upload_dir = config.get_jsonpath("$.ProjectConfig.upload_dir", "/res_pack/upload")
+    upload_root = (runtime_root / str(upload_dir).lstrip("/\\")).resolve()
+    archive = (
+        runtime_root / str(task.custom_source_code_file_path).lstrip("/\\")
+    ).resolve()
+    try:
+        archive.relative_to(upload_root)
+    except ValueError:
+        raise UnicornException(code=4000, message="任务源码路径不安全，拒绝操作")
+    if archive.suffix.lower() != ".zip":
+        raise UnicornException(code=4000, message="任务源码不是 ZIP 文件，拒绝操作")
+    return archive
+
+
+@app.post("/tasks/{task_id}/retry", summary="重试失败的编译任务")
+async def retry_compilation_task(task_id: int, db: Session = Depends(get_db)):
+    """使用原任务的源码和参数重新入队，不会创建重复记录。"""
+    task = db.query(FirmwareWaitCompiled).filter_by(id=task_id).first()
+    if task is None:
+        raise UnicornException(code=404, message="编译任务不存在")
+    if task.status != 1:
+        raise UnicornException(code=4000, message="只有编译失败的任务可以重试")
+
+    source_archive = _task_source_archive(task)
+    if not source_archive.is_file():
+        raise UnicornException(
+            code=4000,
+            message="原始源码包已不存在，请在“新建编译任务”中重新上传",
+        )
+
+    task.status = 3
+    task.err_log = None
+    task.update_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.commit()
+    set_progress(task.id, 0, "queued", "用户已重试，任务正在排队", status="queued")
+    return {
+        "code": 2000,
+        "status": True,
+        "message": "任务已重新进入编译队列",
+        "data": {"id": task.id},
+    }
+
+
+@app.delete("/tasks/{task_id}", summary="删除编译队列任务")
+async def delete_compilation_task(task_id: int, db: Session = Depends(get_db)):
+    """删除失败/排队任务，并清理对应进度和上传的源码包。"""
+    task = db.query(FirmwareWaitCompiled).filter_by(id=task_id).first()
+    if task is None:
+        raise UnicornException(code=404, message="编译任务不存在")
+    if task.status == 2:
+        raise UnicornException(code=4000, message="任务正在编译，不能直接删除")
+    if task.status not in (1, 3):
+        raise UnicornException(code=4000, message="当前任务状态不允许删除")
+
+    source_archive = _task_source_archive(task)
+    progress = db.query(FirmwareBuildProgress).filter_by(task_id=task_id).first()
+    if progress is not None:
+        db.delete(progress)
+    db.delete(task)
+    db.commit()
+
+    if source_archive.is_file():
+        try:
+            source_archive.unlink()
+        except OSError:
+            lg.exception("任务已删除，但清理源码包失败：{}", source_archive)
+    return {
+        "code": 2000,
+        "status": True,
+        "message": "任务、进度记录和源码包已删除",
+        "data": {"id": task_id},
+    }
 
 
 @app.websocket("/ws/progress/{task_id}")
